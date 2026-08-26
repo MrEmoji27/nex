@@ -1,0 +1,19 @@
+PackageIdentifier: MrEmoji27.Nex
+PackageVersion: 3.0.0-alpha.1
+PackageName: Nex
+Publisher: Nex contributors
+License: AGPL-3.0-or-later
+LicenseUrl: https://github.com/MrEmoji27/nex/blob/main/LICENSE
+ShortDescription: Terminal-native peer-to-peer chat
+Description: Nex is a terminal-native, peer-to-peer chat application. No central servers, no accounts—just direct encrypted connections between devices.
+Tags:
+- chat
+- p2p
+- terminal
+- encrypted
+- decentralized
+PackageUrl: https://github.com/MrEmoji27/nex
+ProjectUrl: https://github.com/MrEmoji27/nex
+ReleaseNotesUrl: https://github.com/MrEmoji27/nex/releases/tag/v3.0.0-alpha.1
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

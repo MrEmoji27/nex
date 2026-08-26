@@ -1,0 +1,16 @@
+PackageIdentifier: MrEmoji27.Nex
+PackageVersion: 3.0.0-alpha.1
+ManifestType: installer
+ManifestVersion: 1.6.0
+Installers:
+- Architecture: x64
+  InstallerType: inno
+  InstallerUrl: https://github.com/MrEmoji27/nex/releases/download/v3.0.0-alpha.1/Nex-setup-3.0.0-alpha.1.exe
+  InstallerSha256: e0cf3c26a34312e9763df3d0c0d65519888339bdab6958b2ae52942ec31149aa
+  Scope: user
+  InstallerSwitches:
+    Silent: /VERYSILENT /SUPPRESSMSGBOXES
+    SilentWithProgress: /VERYSILENT /SUPPRESSMSGBOXES
+  ProductCode: '{8E1B6C4A-52D7-4B3E-9A64-NEXALPHA00001}'
+  # Note: Submitting to the public winget repo requires a PR to microsoft/winget-pkgs.
+  # Pre-release versions (like this alpha) may be refused by the winget maintainers.
