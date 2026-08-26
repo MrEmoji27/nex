@@ -23,7 +23,8 @@ First public release. A Go rendezvous service for optional serverless discovery,
 
 - **Rendezvous discovery service (Go)** — An optional, off-by-default Go service that helps peers find each other without a central server. Runs locally or on a VPS; the app works fine without it.
 - **Cross-implementation conformance vectors** — Frozen test vectors that both the Go and TypeScript rendezvous clients are verified against, so the two implementations stay in lockstep.
-- **Native audio sidecar** — Real microphone capture at 48 kHz mono, 20 ms frames, Opus encoding with forward error correction. The sidecar runs as a separate process and talks to the main app over a local pipe.
+- **Native audio sidecar** — Real microphone capture at 48 kHz mono, 20 ms frames, Opus encoding with forward error correction. The sidecar runs as a separate process and talks to the main app over a local pipe, so a fault in an audio driver kills something restartable rather than the node holding your conversation.
+- **Echo cancellation and noise suppression** — Voice no longer feeds your speaker back into your microphone. Measured at 13.9 dB echo reduction on a synthetic room, roughly fivefold. It is a least-mean-squares canceller written in Rust rather than the WebRTC processing module, which does not build on Windows; it handles the common case of speaker bleed on every platform, and will not match a dedicated conferencing app in a difficult room.
 - **Relicensed from MIT to AGPL-3.0-or-later** — The license now requires that anyone distributing modified versions also share their changes.
 
 ### Fixed
