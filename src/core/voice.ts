@@ -121,6 +121,17 @@ export class MockVoiceCodec implements VoiceCodec {
  * feeds the UI's speaking rings. All transport access goes through the small
  * Send/Receive ports below, so tests drive it without sockets.
  */
+/**
+ * Capture and playback of already-encoded frames. Implemented by the native
+ * sidecar bridge in `native-voice.ts`.
+ */
+export interface EncodedAudioPort {
+  readonly name: string
+  start(onFrame: (bytes: Uint8Array) => void): Promise<void>
+  stop(): Promise<void>
+  play(bytes: Uint8Array): void
+}
+
 export interface VoiceSendPort {
   /** peerIds currently reachable for relaying/fan-out (host or host link). */
   targets(): string[]
@@ -134,6 +145,17 @@ export interface VoiceSessionOptions {
   sink: AudioSink
   codec: VoiceCodec
   send: VoiceSendPort
+  /**
+   * Already-encoded audio, used INSTEAD of source/codec/sink when present.
+   *
+   * The trio above assumes this runtime can hold PCM and run a codec. It can do
+   * the first and not the second, so the native path captures and encodes in
+   * one process and hands over Opus directly. Passing that through the PCM
+   * ports would mean a PcmFrame whose bytes are secretly Opus — a lie the types
+   * would happily let us tell. This is the honest alternative, and the mocks
+   * still exercise the trio.
+   */
+  encoded?: EncodedAudioPort
   /** Speaking-state changes surface here (UI rings / headless events). */
   onSpeakingChange?(speaking: boolean): void
   /** Frame-level diagnostics hook (tests, future call-diagnostics modal). */
@@ -180,7 +202,11 @@ export class VoiceSession {
     if (this.running) return
     this.running = true
     await this.options.sink.start()
-    await this.options.source.start((frame) => this.onCaptured(frame))
+    if (this.options.encoded) {
+      await this.options.encoded.start((bytes) => this.onEncoded(bytes))
+    } else {
+      await this.options.source.start((frame) => this.onCaptured(frame))
+    }
     this.flushTimer = setInterval(() => this.flushDue(), 10)
     // Presence announce rides the control channel AFTER the pipeline is up.
     sendJoinAnnounce?.()
@@ -189,8 +215,12 @@ export class VoiceSession {
   async leave(): Promise<void> {
     if (!this.running) return
     this.running = false
-    await this.options.source.stop()
-    await this.options.sink.stop()
+    if (this.options.encoded) {
+      await this.options.encoded.stop()
+    } else {
+      await this.options.source.stop()
+      await this.options.sink.stop()
+    }
     if (this.flushTimer) clearInterval(this.flushTimer)
     this.flushTimer = undefined
     this.setSpeaking(false)
@@ -233,7 +263,17 @@ export class VoiceSession {
   private onCaptured(frame: PcmFrame): void {
     if (!this.running || !this.sendEnabled) return
     if (this.options.send.targets().length === 0) return
-    const payload = this.options.codec.encode(frame)
+    this.transmit(this.options.codec.encode(frame))
+  }
+
+  /** Native path: the sidecar already encoded it, so it goes straight out. */
+  private onEncoded(bytes: Uint8Array): void {
+    if (!this.running || !this.sendEnabled) return
+    if (this.options.send.targets().length === 0) return
+    this.transmit(bytes)
+  }
+
+  private transmit(payload: Uint8Array): void {
     const meta: VoiceFrameMeta = { roomId: this.options.roomId, fromPeerId: this.options.selfId, seq: this.seq++ }
     for (const peerId of this.options.send.targets()) {
       this.options.send.sendFrame(peerId, meta, payload)
@@ -251,7 +291,11 @@ export class VoiceSession {
       while (queue.length > 0 && queue[0]!.atMs <= now) {
         const item = queue.shift()!
         try {
-          this.options.sink.play(this.options.codec.decode(item.bytes, 48_000, 1))
+          if (this.options.encoded) {
+            this.options.encoded.play(item.bytes)
+          } else {
+            this.options.sink.play(this.options.codec.decode(item.bytes, 48_000, 1))
+          }
           playedAny = true
         } catch {
           // A bad frame skips playback; the stream keeps flowing.
