@@ -16,6 +16,8 @@
 // Errors and diagnostics go to stderr, never stdout — stdout is a binary
 // stream and a stray log line would corrupt the frame it lands in.
 
+mod aec;
+
 use std::io::{Read, Write};
 use std::sync::mpsc;
 
@@ -153,7 +155,15 @@ fn run() -> Result<(), String> {
     // 48 kHz and no resampling happens at all.
     let ratio = out_rate as f64 / SAMPLE_RATE as f64;
 
-    // --- capture: mic -> Opus -> stdout -----------------------------------
+    // One canceller shared by both streams. Capture subtracts the echo;
+    // playback tells it what went to the speaker. A Mutex is acceptable here
+    // because each callback holds it for one frame of arithmetic and the two
+    // audio threads never contend for long.
+    let aec = std::sync::Arc::new(std::sync::Mutex::new(aec::EchoCanceller::new(true)));
+    let aec_cap = aec.clone();
+    let aec_play = aec.clone();
+
+    // --- capture: mic -> AEC -> Opus -> stdout -----------------------------
     let (tx_cap, rx_cap) = mpsc::channel::<Vec<f32>>();
     let mut pending: Vec<f32> = Vec::with_capacity(FRAME_SAMPLES * 2);
 
@@ -173,7 +183,10 @@ fn run() -> Result<(), String> {
                     }
                 }
                 while pending.len() >= FRAME_SAMPLES {
-                    let frame: Vec<f32> = pending.drain(..FRAME_SAMPLES).collect();
+                    let mut frame: Vec<f32> = pending.drain(..FRAME_SAMPLES).collect();
+                    if let Ok(mut a) = aec_cap.lock() {
+                        a.process(&mut frame);
+                    }
                     let _ = tx_cap.send(frame);
                 }
             },
@@ -226,6 +239,14 @@ fn run() -> Result<(), String> {
 
                 for s in data[written * ch..].iter_mut() {
                     *s = 0.0;
+                }
+
+                // Hand the canceller exactly what the speaker received, one
+                // sample per frame rather than per channel — the microphone
+                // hears one mixed signal, not a stereo pair.
+                if let Ok(mut a) = aec_play.lock() {
+                    let mono: Vec<f32> = data.chunks_exact(ch).map(|c| c[0]).collect();
+                    a.push_reference(&mono);
                 }
 
                 // Drop what we consumed, keeping one sample for the next
@@ -310,7 +331,7 @@ fn run() -> Result<(), String> {
     let mut pkt = vec![0u8; MAX_PACKET];
 
     log(&format!(
-        "ready: {SAMPLE_RATE} Hz mono, {FRAME_MS}ms frames, {BITRATE} bps, fec on"
+        "ready: {SAMPLE_RATE} Hz mono, {FRAME_MS}ms frames, {BITRATE} bps, fec on, aec+ns on"
     ));
 
     while let Ok(frame) = rx_cap.recv() {
