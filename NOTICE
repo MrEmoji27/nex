@@ -1,0 +1,26 @@
+Nex — terminal-native peer-to-peer communication
+Copyright (C) 2026 zemo (github.com/MrEmoji27)
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>.
+
+---
+
+Why AGPL rather than MIT or GPL:
+
+Nex's entire premise is that no server carries your messages and no third party
+can read them. Under a permissive licence, someone could take this code, remove
+those properties, and run it as a hosted service without ever showing anyone the
+change. Section 13 — Remote Network Interaction — is what closes that: a
+modified version offered to users over a network must offer its source too.
+
+This does not forbid commercial use. It requires that changes stay visible.

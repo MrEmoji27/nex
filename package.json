@@ -1,0 +1,25 @@
+{
+  "name": "nex",
+  "version": "3.0.0-alpha.1",
+  "description": "Terminal-native peer-to-peer communication. Two autonomous terminal peers, no central server.",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/main/index.tsx",
+    "headless": "bun run src/main/headless.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.3.0",
+    "@noble/curves": "^2.3.0",
+    "@noble/hashes": "^2.3.0",
+    "@opentui/core": "0.5.6",
+    "@opentui/react": "0.5.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "bun-types": "^1.4.0",
+    "typescript": "5.9.3"
+  },
+  "license": "AGPL-3.0-or-later"
+}

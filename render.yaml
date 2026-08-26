@@ -1,0 +1,34 @@
+# Render blueprint — the Rendezvous service.
+#
+# The website lives in its own repository (nex-site) with its own blueprint;
+# the two deploy independently and share nothing but the wire contract.
+#
+# The service holds every lease in memory and persists nothing: no disk, no
+# database, no backup. A restart lapses every lease and each node re-registers
+# on its next refresh tick — designed behaviour, not an outage to engineer
+# around.
+
+services:
+  - type: web
+    name: nex-rendezvous
+    runtime: docker
+    dockerfilePath: ./rendezvous/Dockerfile
+    dockerContext: ./rendezvous
+    region: singapore
+    # NOTE: the free plan sleeps after ~15 minutes without HTTP traffic, which
+    # is actively wrong here. The control channel is a long-lived WebSocket and
+    # leases expire on a 90-second clock, so a sleeping instance drops every
+    # attached client and silently lapses everyone's presence — from outside it
+    # looks like users vanishing at random. Fine for a first look; move to a
+    # paid instance before anyone relies on it.
+    plan: free
+    healthCheckPath: /v1/status
+    autoDeploy: true
+    envVars:
+      # Render injects PORT and routes to nothing else. The service reads it,
+      # and NEX_RENDEZVOUS_ADDR is deliberately left unset so PORT wins.
+      - key: NEX_RENDEZVOUS_TRUST_PROXY
+        # Render terminates TLS and proxies, so the real client address arrives
+        # in X-Forwarded-For. Without this every per-IP rate limit would see a
+        # single address — Render's — and throttle the whole world as one.
+        value: "true"

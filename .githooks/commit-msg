@@ -1,0 +1,31 @@
+#!/bin/sh
+# Strip attribution trailers from every commit message.
+#
+# The repository's history was rewritten once to remove `Co-Authored-By` lines
+# for Claude and CommandCodeBot. This makes that stick: any tool that appends an
+# attribution trailer gets it removed before the commit is written, so a future
+# assistant's default behaviour cannot quietly reintroduce a second contributor.
+#
+# Deliberately silent on the common path — it fires on every commit, and a hook
+# that prints on every commit gets ignored.
+#
+# To let a co-author through, commit with --no-verify.
+
+msg="$1"
+[ -f "$msg" ] || exit 0
+
+# Match the trailer in any casing, and only at the start of a line so a mention
+# inside prose ("...the Co-Authored-By trailer...") is left alone.
+if grep -qiE '^[[:space:]]*(Co-Authored-By|Co-Committed-By|Signed-Off-By[[:space:]]*:.*(claude|anthropic|commandcode))' "$msg"; then
+  tmp="$msg.trailerstrip"
+  grep -viE '^[[:space:]]*(Co-Authored-By|Co-Committed-By):' "$msg" > "$tmp"
+
+  # Drop blank lines the removal left dangling at the end, so the message does
+  # not gain trailing whitespace every time this runs.
+  awk 'BEGIN{n=0} {lines[n++]=$0} END{ last=n-1; while (last>=0 && lines[last] ~ /^[[:space:]]*$/) last--; for(i=0;i<=last;i++) print lines[i] }' "$tmp" > "$msg"
+  rm -f "$tmp"
+
+  echo "commit-msg: removed attribution trailer(s)" >&2
+fi
+
+exit 0

@@ -1,0 +1,8 @@
+# Go tooling (gofmt) requires LF; CRLF working trees make gofmt -l flag
+# every file and fail CI. Index is already LF-normalized.
+*.go text eol=lf
+
+# TypeScript sources: keep LF so formatting checks behave the same on all
+# platforms and diffs stay stable across checkouts.
+*.ts text eol=lf
+*.tsx text eol=lf

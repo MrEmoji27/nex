@@ -1,0 +1,11 @@
+node_modules/
+dist/
+data/local/
+*.log
+.DS_Store
+.commandcode/
+
+# Next.js static export output and the agent files next dev regenerates
+web/out/
+web/AGENTS.md
+web/CLAUDE.md

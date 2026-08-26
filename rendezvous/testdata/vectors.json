@@ -1,0 +1,81 @@
+{
+  "_comment": [
+    "Cross-implementation conformance vectors for the Nex Rendezvous wire contract v1.",
+    "",
+    "V3 SS15: a prior audit found an implementation labelled 'Noise' that was self-consistent",
+    "but not spec-conformant, because it had only ever been tested against another copy of",
+    "itself. Two implementations agreeing is not proof of correctness -- but two implementations",
+    "DISAGREEING is proof of a bug, and this file is how that gets caught automatically.",
+    "",
+    "Neither the Go service nor the TypeScript client is the source of truth here. THIS FILE is.",
+    "Both sides assert against it. If your implementation produces different bytes, your",
+    "implementation is wrong; do not edit the vectors to match your code.",
+    "",
+    "Regenerate only when the contract itself changes, and say so in the commit message."
+  ],
+  "identitySeedHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "signKeyDerivationLabel": "nex-rendezvous-sign-v1",
+  "signPub": "8a6f882a2066ea70be6eeabca464b5424262f44f66eb605a023fc25bdc54d076",
+  "publicDescriptor": {
+    "_fields": "LP(v=1) LP(handle) LP(nodeId) LP(signPub) LParr(capabilities) LPn(issuedAt) LPn(expiresAt) LP(connectable)",
+    "domain": "nex-rendezvous/public-descriptor-v1",
+    "v": 1,
+    "handle": "roshan",
+    "nodeId": "AA",
+    "signPub": "bb",
+    "capabilities": [
+      "chat"
+    ],
+    "connectable": true,
+    "issuedAt": 5,
+    "expiresAt": 7,
+    "signingInputHex": "6e65782d72656e64657a766f75732f7075626c69632d64657363726970746f722d7631000000013100000006726f7368616e000000024141000000026262000000010000000463686174000000013500000001370000000474727565",
+    "signatureHex": "dd618fd58a61517a82fc3456bcaeb9e62a1277454b768bd2d012eacec85ec01c4ead53e77def35a6cde5796c10555d4eb9901d09b4967f7a23ca46d48bae9002"
+  },
+  "contactDescriptor": {
+    "_fields": "LP(v=1) LP(handle) LP(nodeId) LP(signPub) LP(noisePub) LParr(capabilities) LPcand(candidates) LPn(issuedAt) LPn(expiresAt)",
+    "_note": "The second candidate deliberately contains '|' in both kind and host. Under the pre-amendment flattened \"kind|host|port\" encoding this collided with contactDescriptorCollision below; under LPcand it must not.",
+    "domain": "nex-rendezvous/contact-descriptor-v1",
+    "v": 1,
+    "handle": "roshan",
+    "nodeId": "AA",
+    "signPub": "bb",
+    "noisePub": "cc",
+    "capabilities": [
+      "chat",
+      "rooms"
+    ],
+    "candidates": [
+      {
+        "kind": "direct-tcp",
+        "host": "203.0.113.9",
+        "port": 42001
+      },
+      {
+        "kind": "weird|kind",
+        "host": "a|b",
+        "port": 1
+      }
+    ],
+    "issuedAt": 5,
+    "expiresAt": 7,
+    "signingInputHex": "6e65782d72656e64657a766f75732f636f6e746163742d64657363726970746f722d7631000000013100000006726f7368616e00000002414100000002626200000002636300000002000000046368617400000005726f6f6d73000000020000000a6469726563742d7463700000000b3230332e302e3131332e390000000534323030310000000a77656972647c6b696e6400000003617c62000000013100000001350000000137",
+    "signatureHex": "d710e2b85835f6845015a4d8f0171e6bf0a362f132ca98e387e72d72b5c7641351fbee0b0162e5e828b14b2cb6cf029bca007f3c554829b7b1a48b3685f72e03"
+  },
+  "contactDescriptorCollision": {
+    "_note": "Amendment 1 regression guard. Identical to contactDescriptor except the second candidate splits 'weird|kind' / 'a|b' differently. Its signing input MUST differ; if the two are equal, candidate signing is malleable.",
+    "candidates": [
+      {
+        "kind": "direct-tcp",
+        "host": "203.0.113.9",
+        "port": 42001
+      },
+      {
+        "kind": "weird",
+        "host": "kind|a",
+        "port": 1
+      }
+    ],
+    "signingInputHex": "6e65782d72656e64657a766f75732f636f6e746163742d64657363726970746f722d7631000000013100000006726f7368616e00000002414100000002626200000002636300000002000000046368617400000005726f6f6d73000000020000000a6469726563742d7463700000000b3230332e302e3131332e39000000053432303031000000057765697264000000066b696e647c61000000013100000001350000000137"
+  }
+}
