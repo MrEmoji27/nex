@@ -4,7 +4,7 @@
     Run: irm https://raw.githubusercontent.com/MrEmoji27/nex/main/packaging/install.ps1 | iex
 
 .NOTES
-    - Resolves latest release via GitHub API
+    - Resolves a pinned release tag via the GitHub API
     - Downloads the Inno Setup installer (.exe)
     - Verifies SHA256 BEFORE execution (security critical)
     - Runs installer silently (/VERYSILENT /SUPPRESSMSGBOXES)
@@ -26,15 +26,24 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
     exit 1
 }
 
-# Configuration
+# Configuration.
+#
+# The tag is pinned deliberately. An earlier version resolved /releases/latest
+# while pinning the asset name and hash, which breaks on the very next release:
+# "latest" moves, the asset name no longer matches, and the script dies with
+# "asset not found" for everyone. Worse, if the name did still match, the hash
+# would not, and a legitimate download would look like tampering.
+#
+# These three move together. Cutting a release means updating all three here.
 $repo = "MrEmoji27/nex"
-$expectedSha256 = "e0cf3c26a34312e9763df3d0c0d65519888339bdab6958b2ae52942ec31149aa"
+$version = "v3.0.0-alpha.1"
 $assetName = "Nex-setup-3.0.0-alpha.1.exe"
+$expectedSha256 = "e0cf3c26a34312e9763df3d0c0d65519888339bdab6958b2ae52942ec31149aa"
 
-Write-Host "Resolving latest release from GitHub..." -ForegroundColor Cyan
+Write-Host "Resolving $version from GitHub..." -ForegroundColor Cyan
 
 try {
-    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -ErrorAction Stop
+    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/$version" -ErrorAction Stop
 }
 catch {
     Write-Error "Failed to fetch release info from GitHub API: $_"
@@ -43,7 +52,7 @@ catch {
 
 $asset = $release.assets | Where-Object { $_.name -eq $assetName }
 if (-not $asset) {
-    Write-Error "Asset '$assetName' not found in latest release."
+    Write-Error "Asset $assetName not found in release $version."
     exit 1
 }
 
