@@ -253,7 +253,7 @@ describe("calling someone", () => {
   test("/call with no argument answers an invitation", async () => {
     const joined: string[] = []
     const h = harness(
-      { invitations: [{ roomId: "r00m", roomName: "call", hostPeerId: "B".repeat(64), hostName: "roshan" }] },
+      { invitations: [{ roomId: "r00m", roomName: "call", hostPeerId: "B".repeat(64), hostName: "roshan", receivedAt: 0 }] },
       {
         joinRoom: async (id: string) => {
           joined.push(id)
@@ -282,7 +282,7 @@ describe("calling someone", () => {
   test("/join with no argument takes the only invitation", async () => {
     const joined: string[] = []
     const h = harness(
-      { invitations: [{ roomId: "only", roomName: "lounge", hostPeerId: "B".repeat(64), hostName: "roshan" }] },
+      { invitations: [{ roomId: "only", roomName: "lounge", hostPeerId: "B".repeat(64), hostName: "roshan", receivedAt: 0 }] },
       {
         joinRoom: async (id: string) => {
           joined.push(id)

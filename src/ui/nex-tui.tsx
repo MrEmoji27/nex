@@ -620,6 +620,7 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
       peer={selectedPeer}
       messages={messages}
       height={paneHeight}
+      width={narrow ? width : width - layout.peopleWidth}
       agreement={selectedPeerId ? (ui.retention.get(selectedPeerId) ?? null) : null}
       mineRetention={ui.settings.retention ?? "forever"}
       settle={reveal(2)}

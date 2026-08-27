@@ -98,13 +98,15 @@ export function ChatPane(props: {
   peer: PeerInfo | null
   messages: ChatMessage[]
   height: number
+  /** Explicit column count; omitted means fill the row. */
+  width?: number
   /** Relationship-level retention state for the open conversation. */
   agreement?: PeerRetentionState | null
   mineRetention?: RetentionPolicy
   /** Entrance choreography: true until the shell's stagger reaches this pane. */
   settle?: boolean
 }) {
-  const { peer, messages, height, agreement, mineRetention, settle } = props
+  const { peer, messages, height, width, agreement, mineRetention, settle } = props
   const arrival = useArrivalFlash(peer ? messages : [], peer?.peerId ?? null)
   // Outbound queue: dots tick while a send is genuinely in flight, then the
   // mark resolves to its static state. Inert (and honest) otherwise.
@@ -121,7 +123,11 @@ export function ChatPane(props: {
   return (
     <box
       style={{
-        flexGrow: 1,
+        // An explicit width, not flexGrow. Growing into the remaining space
+        // overflowed the terminal by one column, so the right-hand border was
+        // drawn off-screen and the panel had no closing edge at any size — it
+        // read as a half-rendered box.
+        ...(width ? { width } : { flexGrow: 1 }),
         height,
         paddingLeft: 1,
         paddingRight: 1,
