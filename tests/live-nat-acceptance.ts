@@ -30,6 +30,15 @@ interface Args {
   service: string
   dataDir: string
   timeoutMs: number
+  /**
+   * Path to a compiled `nex` binary to test INSTEAD of the source tree.
+   *
+   * This is what the other machine actually runs. A compiled binary is not the
+   * same program as `bun run src/main/...`: dynamic imports are resolved at
+   * build time, the data directory moves, and there is no checkout to fall back
+   * on. Testing the source and shipping the binary tests the wrong thing.
+   */
+  binary?: string
 }
 
 function parse(argv: readonly string[]): Args {
@@ -39,7 +48,9 @@ function parse(argv: readonly string[]): Args {
   }
   const role = (get("--role") ?? "") as Args["role"]
   if (role !== "zro" && role !== "roshan") {
-    console.log("usage: --role zro|roshan --handle <handle> [--peer <handle>] [--service <url>]")
+    console.log(
+      "usage: --role zro|roshan --handle <handle> [--peer <handle>] [--service <url>] [--binary path/to/nex.exe]",
+    )
     process.exit(2)
   }
   const handle = get("--handle")
@@ -63,6 +74,7 @@ function parse(argv: readonly string[]): Args {
     service,
     dataDir: get("--data-dir") ?? `data/acceptance/${handle}`,
     timeoutMs: Number(get("--timeout") ?? 120_000),
+    binary: get("--binary"),
   }
 }
 
@@ -72,16 +84,16 @@ const MESSAGE = `acceptance ${args.handle} ${Date.now()}`
 // ---------- the node ----------
 
 await rm(args.dataDir, { recursive: true, force: true }).catch(() => {})
-const proc = Bun.spawn(
-  ["bun", "run", "src/main/headless.ts", "--name", args.role, "--data-dir", args.dataDir],
-  {
+const command = args.binary
+  ? [args.binary, "headless", "--name", args.role, "--data-dir", args.dataDir]
+  : ["bun", "run", "src/main/headless.ts", "--name", args.role, "--data-dir", args.dataDir]
+const proc = Bun.spawn(command, {
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
     // Diagnostics are what turns "it did not connect" into a named layer.
     env: { ...process.env, NEX_DEBUG_NET: "1" },
-  },
-)
+})
 
 const events: Array<Record<string, unknown>> = []
 ;(async () => {
@@ -191,7 +203,8 @@ async function classify(): Promise<string> {
 // ---------- the run ----------
 
 console.log(`\nNEX NAT ACCEPTANCE — ${args.role} (${args.handle})`)
-console.log(`service: ${args.service}\n`)
+console.log(`service: ${args.service}`)
+console.log(`under test: ${args.binary ?? "source tree (bun run)"}\n`)
 
 const failures: string[] = []
 const step = (label: string, ok: boolean, detail = ""): boolean => {

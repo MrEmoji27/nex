@@ -25,6 +25,12 @@ export const UDP_TRANSPORT_PROLOGUE = "nex-udp-v1"
 const TAG_HANDSHAKE = 0x01
 const TAG_TRANSPORT = 0x02
 
+/**
+ * Ceiling on frames held during the binding window. A slow disk is milliseconds;
+ * anything filling this is not a peer waiting politely.
+ */
+const MAX_QUEUED = 256
+
 export interface SecureSessionOptions {
   role: "initiator" | "responder"
   /** Our long-term static private key. */
@@ -50,6 +56,23 @@ export class SecureSession {
   private started = false
   private authenticated = false
   private peerClaim: { nodeId: string; name: string } | null = null
+  /**
+   * Transport frames that arrived while the identity binding was still being
+   * decided, held IN ORDER.
+   *
+   * The handshake finishes synchronously; resolving who the peer is does not —
+   * it reads a store, and a slow disk widens the gap. The peer has no way to
+   * know about that gap: from their side the handshake is complete and they may
+   * send immediately, which they routinely do.
+   *
+   * Dropping those frames is not survivable here. The receive cipher advances a
+   * nonce per frame, so a frame that is never decrypted leaves the two counters
+   * one apart forever and EVERY later frame fails authentication. The link goes
+   * on looking connected and carries nothing. The TCP transport learned this
+   * first (see its queuedOps); this is the same window, and this is the same
+   * answer.
+   */
+  private queued: Uint8Array[] = []
 
   constructor(private readonly opts: SecureSessionOptions) {
     this.handshake = new NoiseHandshake(opts.role, opts.staticPrivate, UDP_TRANSPORT_PROLOGUE)
@@ -84,18 +107,24 @@ export class SecureSession {
     }
     if (tag !== TAG_TRANSPORT) return
     if (!this.authenticated) {
-      // Application data before the handshake finished is either a bug or an
-      // attempt to skip authentication. Neither is worth decrypting.
-      this.opts.onError("transport message arrived before the handshake completed")
+      if (!this.handshake.complete) {
+        // Nothing has been agreed yet. This is either a bug or an attempt to
+        // skip authentication, and neither is worth decrypting.
+        this.opts.onError("transport message arrived before the handshake completed")
+        return
+      }
+      // The handshake IS done and only the binding check is outstanding. Hold
+      // it; see `queued`.
+      if (this.queued.length >= MAX_QUEUED) {
+        this.opts.onError("peer sent more than the binding window can hold")
+        return
+      }
+      this.queued.push(body)
       return
     }
-    try {
-      this.opts.onMessage(this.handshake.result.receive.decryptWithAd(new Uint8Array(0), body))
-    } catch {
-      // A frame that fails authentication is not a message; it is noise or an
-      // attack, and either way the session state must not be advanced by it.
-      this.opts.onError("dropped a transport frame that failed authentication")
-    }
+    // A frame that fails authentication is not a message; it is noise or an
+    // attack, and either way the session state must not be advanced by it.
+    this.deliver(body)
   }
 
   /** Encrypt and send one application message. */
@@ -157,6 +186,25 @@ export class SecureSession {
     )
     this.authenticated = true
     this.opts.onAuthenticated({ claim, identityState, result: this.handshake.result })
+
+    // A mismatched peer is being dropped by the caller right now; decrypting
+    // what they queued would be handing an impostor's messages to the user.
+    if (identityState === "mismatch") {
+      this.queued = []
+      return
+    }
+    const held = this.queued
+    this.queued = []
+    for (const body of held) this.deliver(body)
+  }
+
+  /** Decrypt one transport frame in wire order and hand it up. */
+  private deliver(body: Uint8Array): void {
+    try {
+      this.opts.onMessage(this.handshake.result.receive.decryptWithAd(new Uint8Array(0), body))
+    } catch {
+      this.opts.onError("dropped a transport frame that failed authentication")
+    }
   }
 }
 
