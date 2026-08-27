@@ -200,7 +200,7 @@ func TestIntroductionLifecycle(t *testing.T) {
 		TargetNodeID: "TARGET",
 		FromHandle:   "zro",
 		FromNodeID:   "REQUESTER",
-		FromContact:  &descriptor.Contact{Handle: "zro"},
+		FromContact:  "5ea1ed00",
 		ExpiresAt:    now + 60000,
 	}
 	if res := s.PutIntroduction(i); res != IntroOK {
@@ -223,7 +223,7 @@ func TestIntroductionLifecycle(t *testing.T) {
 	}
 
 	// Expired introductions read as absent.
-	expired := &Introduction{RequestID: "99999999-8888-4777-8666-555555555555", ExpiresAt: now + 1000, FromContact: &descriptor.Contact{}}
+	expired := &Introduction{RequestID: "99999999-8888-4777-8666-555555555555", ExpiresAt: now + 1000, FromContact: "5ea1ed00"}
 	s.PutIntroduction(expired)
 	clk.Advance(1001 * time.Millisecond)
 	if s.PeekIntroduction(expired.RequestID) != nil {

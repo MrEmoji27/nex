@@ -225,16 +225,20 @@ const MaxPublicDescriptorBytes = 896
 // deliberate consent: to ask for an introduction is to offer your own address.
 // The target's contact descriptor is not returned here.
 type IntroductionRequest struct {
-	NodeID                string              `json:"nodeId"`
-	SignPub               string              `json:"signPub"`
-	IssuedAt              int64               `json:"issuedAt"`
-	Nonce                 string              `json:"nonce"`
-	RequestID             string              `json:"requestId"`
-	TargetHandle          string              `json:"targetHandle"`
-	FromHandle            string              `json:"fromHandle"`
-	FromContactDescriptor *descriptor.Contact `json:"fromContactDescriptor"`
-	ExpiresAt             int64               `json:"expiresAt"`
-	Sig                   string              `json:"sig"`
+	NodeID       string `json:"nodeId"`
+	SignPub      string `json:"signPub"`
+	IssuedAt     int64  `json:"issuedAt"`
+	Nonce        string `json:"nonce"`
+	RequestID    string `json:"requestId"`
+	TargetHandle string `json:"targetHandle"`
+	FromHandle   string `json:"fromHandle"`
+	// Public already, and the recipient needs it to seal a reply back.
+	FromSignPub string `json:"fromSignPub"`
+	// Opaque here by design: the requester's address, sealed to the target.
+	// This service holds no key that opens it, which is the point.
+	SealedContact string `json:"sealedContact"`
+	ExpiresAt     int64  `json:"expiresAt"`
+	Sig           string `json:"sig"`
 }
 
 // Envelope extracts the common fields.
@@ -245,12 +249,11 @@ func (r *IntroductionRequest) Envelope() Envelope {
 // SigningInput builds the §5.5 input:
 //
 //	LP(nodeId) LP(signPub) LPn(issuedAt) LP(nonce) LP(requestId)
-//	LP(targetHandle) LP(fromHandle) LP(fromContactDescriptor.sig) LPn(expiresAt)
+//	LP(targetHandle) LP(fromHandle) LP(fromSignPub) LP(sealedContact) LPn(expiresAt)
+//
+// The sealed blob is signed, not a field inside it: the service cannot open the
+// blob, so signing the ciphertext is what binds the address to its sender.
 func (r *IntroductionRequest) SigningInput() []byte {
-	var fromSig string
-	if r.FromContactDescriptor != nil {
-		fromSig = r.FromContactDescriptor.Sig
-	}
 	return wire.NewBuilder(wire.DomainIntroRequest).
 		LP(r.NodeID).
 		LP(r.SignPub).
@@ -259,7 +262,8 @@ func (r *IntroductionRequest) SigningInput() []byte {
 		LP(r.RequestID).
 		LP(r.TargetHandle).
 		LP(r.FromHandle).
-		LP(fromSig).
+		LP(r.FromSignPub).
+		LP(r.SealedContact).
 		LPn(r.ExpiresAt).
 		Bytes()
 }
@@ -275,14 +279,15 @@ type IntroductionRequestResponse struct {
 // accept:true must carry contactDescriptor; accept:false must not — omit the
 // field entirely and sign the empty string in its slot.
 type IntroductionRespond struct {
-	NodeID            string              `json:"nodeId"`
-	SignPub           string              `json:"signPub"`
-	IssuedAt          int64               `json:"issuedAt"`
-	Nonce             string              `json:"nonce"`
-	RequestID         string              `json:"requestId"`
-	Accept            bool                `json:"accept"`
-	ContactDescriptor *descriptor.Contact `json:"contactDescriptor,omitempty"`
-	Sig               string              `json:"sig"`
+	NodeID    string `json:"nodeId"`
+	SignPub   string `json:"signPub"`
+	IssuedAt  int64  `json:"issuedAt"`
+	Nonce     string `json:"nonce"`
+	RequestID string `json:"requestId"`
+	Accept    bool   `json:"accept"`
+	// Opaque: the responder's address, sealed to the requester.
+	SealedContact string `json:"sealedContact,omitempty"`
+	Sig           string `json:"sig"`
 }
 
 // Envelope extracts the common fields.
@@ -293,12 +298,9 @@ func (r *IntroductionRespond) Envelope() Envelope {
 // SigningInput builds the §5.6 input:
 //
 //	LP(nodeId) LP(signPub) LPn(issuedAt) LP(nonce) LP(requestId)
-//	LP(accept) LP(contactDescriptor.sig or "")
+//	LP(accept) LP(sealedContact or "")
 func (r *IntroductionRespond) SigningInput() []byte {
-	var contactSig string
-	if r.ContactDescriptor != nil {
-		contactSig = r.ContactDescriptor.Sig
-	}
+	contactSig := r.SealedContact
 	return wire.NewBuilder(wire.DomainIntroRespond).
 		LP(r.NodeID).
 		LP(r.SignPub).
@@ -360,19 +362,24 @@ const (
 
 // IntroductionRequestFrame is a server -> client frame (§7).
 type IntroductionRequestFrame struct {
-	Type                  string              `json:"type"`
-	RequestID             string              `json:"requestId"`
-	FromHandle            string              `json:"fromHandle"`
-	FromContactDescriptor *descriptor.Contact `json:"fromContactDescriptor"`
-	ExpiresAt             int64               `json:"expiresAt"`
+	Type       string `json:"type"`
+	RequestID  string `json:"requestId"`
+	FromHandle string `json:"fromHandle"`
+	// Public already, and the recipient needs it to seal a reply back.
+	FromSignPub string `json:"fromSignPub"`
+	// Opaque here by design: the requester's address, sealed to the target.
+	// This service holds no key that opens it, which is the point.
+	SealedContact string `json:"sealedContact"`
+	ExpiresAt     int64  `json:"expiresAt"`
 }
 
 // IntroductionResponseFrame is a server -> client frame (§7).
 type IntroductionResponseFrame struct {
-	Type              string              `json:"type"`
-	RequestID         string              `json:"requestId"`
-	Accept            bool                `json:"accept"`
-	ContactDescriptor *descriptor.Contact `json:"contactDescriptor,omitempty"`
+	Type      string `json:"type"`
+	RequestID string `json:"requestId"`
+	Accept    bool   `json:"accept"`
+	// Opaque: the responder's address, sealed to the requester.
+	SealedContact string `json:"sealedContact,omitempty"`
 }
 
 // LeaseExpiringFrame is a server -> client frame (§7), sent once at

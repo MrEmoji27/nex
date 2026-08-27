@@ -15,6 +15,7 @@ import {
   type RendezvousClientOptions,
 } from "../src/core/rendezvous/client"
 import { deriveSigningKey } from "../src/core/rendezvous/framing"
+import { seal } from "../src/core/rendezvous/seal"
 import {
   signContactDescriptor,
   signPublicDescriptor,
@@ -27,6 +28,14 @@ const PEER_SEED = "bb".repeat(32)
 const SELF_NODE = "A".repeat(64)
 const PEER_NODE = "B".repeat(64)
 const NOISE_PUB = "cc".repeat(32)
+
+/** Our own signing key — frames arriving for us are sealed to this. */
+const SELF_SIGN_PUB = deriveSigningKey(SELF_SEED).signPub
+
+/** Seal a descriptor to us, the way a peer's client would before sending. */
+function sealedTo(self: unknown): string {
+  return seal(JSON.stringify(self), SELF_SIGN_PUB)
+}
 
 /** A fake WebSocket the test drives directly. */
 class FakeSocket implements ControlSocket {
@@ -438,7 +447,8 @@ describe("introductions over the control channel", () => {
       type: "introduction.request",
       requestId: "req-1",
       fromHandle: "roshan",
-      fromContactDescriptor: contact,
+      fromSignPub: deriveSigningKey(PEER_SEED).signPub,
+      sealedContact: sealedTo(contact),
       expiresAt: now + 120_000,
     })
 
@@ -466,7 +476,8 @@ describe("introductions over the control channel", () => {
       type: "introduction.request",
       requestId: "req-1",
       fromHandle: "roshan",
-      fromContactDescriptor: { ...contact, candidates: [{ kind: "direct-tcp", host: "evil.test", port: 9 }] },
+      fromSignPub: deriveSigningKey(PEER_SEED).signPub,
+      sealedContact: sealedTo({ ...contact, candidates: [{ kind: "direct-tcp", host: "evil.test", port: 9 }] }),
       expiresAt: now + 120_000,
     })
 
@@ -491,7 +502,8 @@ describe("introductions over the control channel", () => {
       type: "introduction.request",
       requestId: "req-1",
       fromHandle: "someone-else",
-      fromContactDescriptor: contact,
+      fromSignPub: deriveSigningKey(PEER_SEED).signPub,
+      sealedContact: sealedTo(contact),
       expiresAt: now + 120_000,
     })
 
@@ -568,10 +580,14 @@ describe("introductions over the control channel", () => {
 describe("outbound operations", () => {
   const now = 1_000_000
 
-  test("an introduction request ships our own contact descriptor as consent", async () => {
+  test("an introduction request ships our address sealed, never in the clear", async () => {
+    const { pub } = peerDescriptors(now)
     const { client, calls } = makeClient(
       {
         "/v1/presence/register": () => leaseOk(now),
+        // The request now searches first: the address is sealed to the target,
+        // so their key has to be fetched and re-verified before sending.
+        "/v1/discovery/search": () => ({ status: 200, body: { result: pub } }),
         "/v1/introduction/request": () => ({ status: 202, body: { requestId: "req-1", expiresAt: now + 120_000 } }),
       },
       { now: () => now },
@@ -580,27 +596,53 @@ describe("outbound operations", () => {
     await client.requestIntroduction("roshan")
 
     const req = calls.find((c) => c.path === "/v1/introduction/request")
-    // To ask for an introduction is to offer your own address.
-    expect(req?.body?.fromContactDescriptor).toBeDefined()
+    // To ask for an introduction is still to offer your own address — but the
+    // service relays it without being able to read it.
+    expect(req?.body?.sealedContact).toBeDefined()
+    expect(req?.body?.fromContactDescriptor).toBeUndefined()
+    expect(req?.body?.fromSignPub).toBe(deriveSigningKey(SELF_SEED).signPub)
     expect(req?.body?.targetHandle).toBe("roshan")
+
+    // The address must not be recoverable from what crossed the wire.
+    expect(JSON.stringify(req?.body)).not.toContain("198.51.100.4")
     await client.stop()
   })
 
-  test("accepting releases a contact descriptor; ignoring releases nothing", async () => {
+  test("accepting releases a sealed address; ignoring releases nothing", async () => {
+    const socket = new FakeSocket()
+    const { contact } = peerDescriptors(now)
     const { client, calls } = makeClient(
       {
         "/v1/presence/register": () => leaseOk(now),
         "/v1/introduction/respond": () => ({ status: 200, body: { ok: true } }),
       },
-      { now: () => now },
+      { now: () => now, socket },
     )
     await client.start()
+    socket.open()
+
+    // Accepting means sealing our address to whoever asked, so the request has
+    // to have arrived first. The requester's key comes with it rather than
+    // being looked up, so a service that lied about who asked cannot redirect
+    // where the reply is readable.
+    socket.deliver({
+      type: "introduction.request",
+      requestId: "req-1",
+      fromHandle: "roshan",
+      fromSignPub: deriveSigningKey(PEER_SEED).signPub,
+      sealedContact: sealedTo(contact),
+      expiresAt: now + 120_000,
+    })
+
     await client.respondIntroduction("req-1", true)
     await client.respondIntroduction("req-2", false)
 
     const responds = calls.filter((c) => c.path === "/v1/introduction/respond")
-    expect(responds[0]?.body?.contactDescriptor).toBeDefined()
-    expect(responds[1]?.body?.contactDescriptor).toBeUndefined()
+    expect(responds[0]?.body?.sealedContact).toBeDefined()
+    expect(responds[0]?.body?.contactDescriptor).toBeUndefined()
+    expect(JSON.stringify(responds[0]?.body)).not.toContain("198.51.100.4")
+    // A refusal carries nothing at all.
+    expect(responds[1]?.body?.sealedContact).toBeUndefined()
     await client.stop()
   })
 

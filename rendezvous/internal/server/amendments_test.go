@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,8 +37,9 @@ func TestAmendment2RespondRejectionsAreIndistinguishable(t *testing.T) {
 		ir := protocol.IntroductionRequest{
 			NodeID: zro.nodeID, SignPub: zro.signPub, IssuedAt: now, Nonce: nextNonce(),
 			RequestID: requestID, TargetHandle: "roshan", FromHandle: "zro",
-			FromContactDescriptor: zro.contactDesc("zro", now),
-			ExpiresAt:             now + 30000, // short: lets us expire one quickly
+			FromSignPub:   zro.signPub,
+			SealedContact: "5ea1ed" + strings.Repeat("00", 60),
+			ExpiresAt:     now + 30000, // short: lets us expire one quickly
 		}
 		ir.Sig = zro.sign(ir.SigningInput())
 		if w := h.do(http.MethodPost, "/v1/introduction/request", ir, nil); w.Code != http.StatusAccepted {
@@ -97,7 +99,7 @@ func TestAmendment2RespondRejectionsAreIndistinguishable(t *testing.T) {
 	accept := protocol.IntroductionRespond{
 		NodeID: roshan.nodeID, SignPub: roshan.signPub, IssuedAt: now, Nonce: nextNonce(),
 		RequestID: okID, Accept: true,
-		ContactDescriptor: roshan.contactDesc("roshan", now),
+		SealedContact: "5ea1ed" + strings.Repeat("00", 60),
 	}
 	accept.Sig = roshan.sign(accept.SigningInput())
 	if w := h.do(http.MethodPost, "/v1/introduction/respond", accept, nil); w.Code != http.StatusOK {

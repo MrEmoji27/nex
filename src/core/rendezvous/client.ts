@@ -33,6 +33,7 @@ import {
   type PublicDescriptor,
   type TransportCandidate,
 } from "./descriptor"
+import { open as openSealed, seal } from "./seal"
 
 /** Lifetime we ask for on each published descriptor. Contract caps this at 300 s. */
 const DESCRIPTOR_TTL_MS = 90_000
@@ -130,6 +131,13 @@ export class RendezvousClient {
   private reattachMs = BACKOFF_MIN_MS
   private running = false
   private lastState: RendezvousState | null = null
+  /**
+   * requestId -> the requester's signing key, kept only until we answer.
+   * Accepting means sealing our address back to them, and the key arrives with
+   * the request rather than being looked up, so a service that lied about who
+   * asked cannot redirect the reply.
+   */
+  private requesterKeys = new Map<string, string>()
 
   constructor(private readonly options: RendezvousClientOptions) {
     this.key = deriveSigningKey(options.identity.seedHex)
@@ -279,6 +287,17 @@ export class RendezvousClient {
 
   // ---------- signed request plumbing ----------
 
+  /** Open a sealed contact descriptor addressed to us, or null. */
+  private openContact(sealed: string): ContactDescriptor | null {
+    const plain = openSealed(sealed, this.options.identity.seedHex, this.key.signPub)
+    if (!plain) return null
+    try {
+      return JSON.parse(plain) as ContactDescriptor
+    } catch {
+      return null
+    }
+  }
+
   private envelope(): { nodeId: string; signPub: string; issuedAt: number; nonce: string } {
     const nonce = new Uint8Array(16)
     crypto.getRandomValues(nonce)
@@ -421,22 +440,36 @@ export class RendezvousClient {
 
   /** "I'm looking for <handle>." Ships our own contact descriptor as consent. */
   async requestIntroduction(targetHandle: string): Promise<{ requestId: string; expiresAt: number }> {
+    // The address is sealed to the target, so we need their key first. Search
+    // returns it and the client re-verifies the signature, so this costs one
+    // request and trusts nothing the service says about it.
+    const target = await this.search(targetHandle)
+    if (!target) throw new RendezvousError("not_found", `no node is registered as ${targetHandle}`)
+
     const env = this.envelope()
     const requestId = crypto.randomUUID()
     const { contact } = this.buildDescriptors(env.issuedAt)
     const expiresAt = env.issuedAt + INTRODUCTION_TTL_MS
+    const sealedContact = seal(JSON.stringify(contact), target.signPub)
+    // The sealed blob is signed, not a field inside it: the service cannot open
+    // the blob, so signing the ciphertext is what binds the address to us.
     const input = this.envelopeInput(DOMAIN.introductionRequest, env)
       .str(requestId)
       .str(targetHandle)
       .str(this.options.handle)
-      .str(contact.sig)
+      .str(this.key.signPub)
+      .str(sealedContact)
       .int(expiresAt)
     return this.call("/v1/introduction/request", "POST", {
       ...env,
       requestId,
       targetHandle,
       fromHandle: this.options.handle,
-      fromContactDescriptor: contact,
+      // Our signing key travels in the clear: it is already public, search
+      // returns it, and the recipient needs it to seal their reply back to us.
+      fromSignPub: this.key.signPub,
+      // Our address does not. The service relays this and cannot open it.
+      sealedContact,
       expiresAt,
       sig: sign(input, this.key),
     })
@@ -449,17 +482,25 @@ export class RendezvousClient {
   async respondIntroduction(requestId: string, accept: boolean): Promise<void> {
     const env = this.envelope()
     const contact = accept ? this.buildDescriptors(env.issuedAt).contact : null
+    // Recorded when the request arrived. Without it there is nobody to seal to,
+    // and sending the address in the clear instead would defeat the point.
+    const toSignPub = this.requesterKeys.get(requestId)
+    if (accept && !toSignPub) {
+      throw new RendezvousError("not_found", "cannot accept an introduction that was never received")
+    }
+    const sealedContact = contact && toSignPub ? seal(JSON.stringify(contact), toSignPub) : ""
     const input = this.envelopeInput(DOMAIN.introductionRespond, env)
       .str(requestId)
       .bool(accept)
-      .str(contact?.sig ?? "")
+      .str(sealedContact)
     await this.call("/v1/introduction/respond", "POST", {
       ...env,
       requestId,
       accept,
-      ...(contact ? { contactDescriptor: contact } : {}),
+      ...(sealedContact ? { sealedContact } : {}),
       sig: sign(input, this.key),
     })
+    this.requesterKeys.delete(requestId)
   }
 
   // ---------- control channel ----------
@@ -535,24 +576,39 @@ export class RendezvousClient {
         const f = frame as unknown as {
           requestId: string
           fromHandle: string
-          fromContactDescriptor: ContactDescriptor
+          fromSignPub: string
+          sealedContact: string
           expiresAt: number
+        }
+        if (!f.requestId || !f.fromSignPub || !f.sealedContact) return
+
+        const opened = this.openContact(f.sealedContact)
+        if (!opened) {
+          this.options.events.error?.("ignored an introduction request that could not be opened")
+          return
         }
         // Validate before showing a human a name. This is the same lesson the
         // invite path learned: naming first meant an impostor got stored wearing
         // someone else's label.
-        if (!f.requestId || !verifyContactDescriptor(f.fromContactDescriptor, this.now())) {
+        if (!verifyContactDescriptor(opened, this.now())) {
           this.options.events.error?.("ignored an introduction request with an invalid descriptor")
           return
         }
-        if (f.fromContactDescriptor.handle !== f.fromHandle) {
+        // The sealed descriptor must belong to the key that sent it, or anyone
+        // could relay somebody else's address under their own name.
+        if (opened.signPub !== f.fromSignPub) {
+          this.options.events.error?.("ignored an introduction request whose descriptor did not match its sender")
+          return
+        }
+        if (opened.handle !== f.fromHandle) {
           this.options.events.error?.("ignored an introduction request whose handle did not match its descriptor")
           return
         }
+        this.requesterKeys.set(f.requestId, f.fromSignPub)
         this.options.events.introductionRequest?.({
           requestId: f.requestId,
           fromHandle: f.fromHandle,
-          fromContactDescriptor: f.fromContactDescriptor,
+          fromContactDescriptor: opened,
           expiresAt: f.expiresAt,
         })
         return
@@ -561,19 +617,22 @@ export class RendezvousClient {
         const f = frame as unknown as {
           requestId: string
           accept: boolean
-          contactDescriptor?: ContactDescriptor
+          sealedContact?: string
         }
         if (!f.requestId) return
+        let contact: ContactDescriptor | undefined
         if (f.accept) {
-          if (!f.contactDescriptor || !verifyContactDescriptor(f.contactDescriptor, this.now())) {
+          const opened = f.sealedContact ? this.openContact(f.sealedContact) : null
+          if (!opened || !verifyContactDescriptor(opened, this.now())) {
             this.options.events.error?.("ignored an acceptance carrying an invalid descriptor")
             return
           }
+          contact = opened
         }
         this.options.events.introductionResponse?.({
           requestId: f.requestId,
           accept: Boolean(f.accept),
-          contactDescriptor: f.accept ? f.contactDescriptor : undefined,
+          contactDescriptor: contact,
         })
         return
       }
@@ -602,4 +661,5 @@ export function browserSocketFactory(url: string, headers: Record<string, string
     onClose: (cb) => ws.addEventListener("close", () => cb()),
     onError: (cb) => ws.addEventListener("error", (e) => cb(e)),
   }
+
 }

@@ -310,7 +310,7 @@ func (s *Server) handleIntroductionRequest(w http.ResponseWriter, r *http.Reques
 	if e := decodeJSON(body, &req); e != nil {
 		return e
 	}
-	if req.FromContactDescriptor == nil || !requestIDLooksValid(req.RequestID) {
+	if req.SealedContact == "" || req.FromSignPub == "" || !requestIDLooksValid(req.RequestID) {
 		return apierr.New(apierr.InvalidRequest)
 	}
 	if e := s.authenticate(ratelimit.OpIntroRequest, req.Envelope(), req.SigningInput(), s.clientIP(r)); e != nil {
@@ -331,17 +331,17 @@ func (s *Server) handleIntroductionRequest(w http.ResponseWriter, r *http.Reques
 		return apierr.New(apierr.InvalidRequest)
 	}
 
-	// The requester ships their own contact descriptor: to ask for an
-	// introduction is to offer your own address. The target's descriptor is not
-	// returned here.
-	fc := req.FromContactDescriptor
-	if err := fc.Validate(); err != nil {
-		return apierr.New(apierr.InvalidRequest)
-	}
-	if fc.Handle != from || fc.NodeID != req.NodeID || fc.SignPub != req.SignPub {
-		return apierr.New(apierr.InvalidRequest)
-	}
-	if err := descriptor.CheckLifetime(fc.IssuedAt, fc.ExpiresAt, now); err != nil {
+	// The requester ships their own address, sealed to the target: to ask for an
+	// introduction is to offer your own address first.
+	//
+	// This service used to validate that descriptor — handle, node id and
+	// lifetime. It cannot any more, because it can no longer read it, and that
+	// is the trade being made deliberately. Those checks were defence in depth,
+	// never load-bearing: §6 already says this service is untrusted and the
+	// receiving client re-verifies everything after opening the seal. What is
+	// still enforced here is that the sealed blob is signed by the sender, so a
+	// relayed address cannot be attributed to somebody else.
+	if req.FromSignPub != req.SignPub {
 		return apierr.New(apierr.InvalidRequest)
 	}
 
@@ -362,7 +362,7 @@ func (s *Server) handleIntroductionRequest(w http.ResponseWriter, r *http.Reques
 		TargetNodeID: lease.NodeID,
 		FromHandle:   from,
 		FromNodeID:   req.NodeID,
-		FromContact:  fc,
+		FromContact:  req.SealedContact,
 		ExpiresAt:    req.ExpiresAt,
 	}) {
 	case store.IntroDuplicate:
@@ -375,11 +375,12 @@ func (s *Server) handleIntroductionRequest(w http.ResponseWriter, r *http.Reques
 	// control channel is currently attached; the requester learns the outcome
 	// only through §5.6's response, or not at all.
 	s.hub.SendToLease(lease.ID, protocol.IntroductionRequestFrame{
-		Type:                  protocol.FrameIntroductionRequest,
-		RequestID:             req.RequestID,
-		FromHandle:            from,
-		FromContactDescriptor: fc,
-		ExpiresAt:             req.ExpiresAt,
+		Type:          protocol.FrameIntroductionRequest,
+		RequestID:     req.RequestID,
+		FromHandle:    from,
+		FromSignPub:   req.FromSignPub,
+		SealedContact: req.SealedContact,
+		ExpiresAt:     req.ExpiresAt,
 	})
 
 	return writeJSON(w, http.StatusAccepted, protocol.IntroductionRequestResponse{
@@ -407,8 +408,8 @@ func (s *Server) handleIntroductionRespond(w http.ResponseWriter, r *http.Reques
 	if !requestIDLooksValid(req.RequestID) {
 		return apierr.New(apierr.InvalidRequest)
 	}
-	// accept:true must carry a contactDescriptor; accept:false must not.
-	if req.Accept == (req.ContactDescriptor == nil) {
+	// accept:true must carry a sealed contact; accept:false must not.
+	if req.Accept == (req.SealedContact == "") {
 		return apierr.New(apierr.InvalidRequest)
 	}
 	if e := s.authenticate(ratelimit.OpIntroRespond, req.Envelope(), req.SigningInput(), s.clientIP(r)); e != nil {
@@ -432,27 +433,22 @@ func (s *Server) handleIntroductionRespond(w http.ResponseWriter, r *http.Reques
 	}
 
 	now := s.clk.NowMs()
-	if req.Accept {
-		cd := req.ContactDescriptor
-		if err := cd.Validate(); err != nil {
-			return apierr.New(apierr.InvalidRequest)
-		}
-		if cd.Handle != lease.Handle || cd.NodeID != req.NodeID || cd.SignPub != req.SignPub {
-			return apierr.New(apierr.InvalidRequest)
-		}
-		if err := descriptor.CheckLifetime(cd.IssuedAt, cd.ExpiresAt, now); err != nil {
-			return apierr.New(apierr.InvalidRequest)
-		}
-	}
+	// The responder's address is sealed to the requester, so the checks that
+	// used to happen here — handle, node id, lifetime — are no longer possible.
+	// They were defence in depth rather than load-bearing: the requesting client
+	// re-verifies the descriptor after opening it, and §6 already treats this
+	// service as untrusted. What remains enforced is the signature over the
+	// sealed blob, which still binds the address to the responder.
+	_ = now
 
 	// Deliver to the requester if they are attached. On reject, no contact
 	// descriptor is carried: a refusal must not hand out an address.
 	if requester := s.store.LeaseByNode(intro.FromNodeID); requester != nil {
 		s.hub.SendToLease(requester.ID, protocol.IntroductionResponseFrame{
-			Type:              protocol.FrameIntroductionResponse,
-			RequestID:         req.RequestID,
-			Accept:            req.Accept,
-			ContactDescriptor: req.ContactDescriptor,
+			Type:          protocol.FrameIntroductionResponse,
+			RequestID:     req.RequestID,
+			Accept:        req.Accept,
+			SealedContact: req.SealedContact,
 		})
 	}
 

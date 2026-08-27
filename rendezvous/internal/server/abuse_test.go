@@ -107,8 +107,9 @@ func TestHandleProbingIsRateLimitedPerTarget(t *testing.T) {
 		ir := protocol.IntroductionRequest{
 			NodeID: zro.nodeID, SignPub: zro.signPub, IssuedAt: h.now(), Nonce: nextNonce(),
 			RequestID: reqID(i), TargetHandle: "ghost-target", FromHandle: "zro",
-			FromContactDescriptor: zro.contactDesc("zro", h.now()),
-			ExpiresAt:             h.now() + 60000,
+			FromSignPub:   zro.signPub,
+			SealedContact: "5ea1ed" + strings.Repeat("00", 60),
+			ExpiresAt:     h.now() + 60000,
 		}
 		ir.Sig = zro.sign(ir.SigningInput())
 		w := h.do(http.MethodPost, "/v1/introduction/request", ir, nil)
@@ -119,8 +120,9 @@ func TestHandleProbingIsRateLimitedPerTarget(t *testing.T) {
 	ir := protocol.IntroductionRequest{
 		NodeID: zro.nodeID, SignPub: zro.signPub, IssuedAt: h.now(), Nonce: nextNonce(),
 		RequestID: reqID(99), TargetHandle: "ghost-target", FromHandle: "zro",
-		FromContactDescriptor: zro.contactDesc("zro", h.now()),
-		ExpiresAt:             h.now() + 60000,
+		FromSignPub:   zro.signPub,
+		SealedContact: "5ea1ed" + strings.Repeat("00", 60),
+		ExpiresAt:     h.now() + 60000,
 	}
 	ir.Sig = zro.sign(ir.SigningInput())
 	w := h.do(http.MethodPost, "/v1/introduction/request", ir, nil)
@@ -240,11 +242,12 @@ func TestIntroductionFloodIsBounded(t *testing.T) {
 	send := func(from *identity, i int, target string) *httptest.ResponseRecorder {
 		ir := protocol.IntroductionRequest{
 			NodeID: from.nodeID, SignPub: from.signPub, IssuedAt: h.now(), Nonce: nextNonce(),
-			RequestID:             "bbbbbbbb-0000-4000-8000-" + pad12(i),
-			TargetHandle:          target,
-			FromHandle:            "from0000xx",
-			FromContactDescriptor: from.contactDesc("from0000xx", h.now()),
-			ExpiresAt:             h.now() + 60000,
+			RequestID:     "bbbbbbbb-0000-4000-8000-" + pad12(i),
+			TargetHandle:  target,
+			FromHandle:    "from0000xx",
+			FromSignPub:   from.signPub,
+			SealedContact: "5ea1ed" + strings.Repeat("00", 60),
+			ExpiresAt:     h.now() + 60000,
 		}
 		ir.Sig = from.sign(ir.SigningInput())
 		return h.do(http.MethodPost, "/v1/introduction/request", ir, nil)

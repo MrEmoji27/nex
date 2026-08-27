@@ -57,8 +57,9 @@ func TestEndToEndIntroduction(t *testing.T) {
 	ir := protocol.IntroductionRequest{
 		NodeID: zro.nodeID, SignPub: zro.signPub, IssuedAt: now, Nonce: nextNonce(),
 		RequestID: reqID, TargetHandle: "roshan", FromHandle: "zro",
-		FromContactDescriptor: zro.contactDesc("zro", now),
-		ExpiresAt:             now + 60000,
+		FromSignPub:   zro.signPub,
+		SealedContact: "5ea1ed" + strings.Repeat("00", 60),
+		ExpiresAt:     now + 60000,
 	}
 	ir.Sig = zro.sign(ir.SigningInput())
 	if w := h.do(http.MethodPost, "/v1/introduction/request", ir, nil); w.Code != http.StatusAccepted {
@@ -69,7 +70,7 @@ func TestEndToEndIntroduction(t *testing.T) {
 	resp := protocol.IntroductionRespond{
 		NodeID: roshan.nodeID, SignPub: roshan.signPub, IssuedAt: now, Nonce: nextNonce(),
 		RequestID: reqID, Accept: true,
-		ContactDescriptor: roshan.contactDesc("roshan", now),
+		SealedContact: "5ea1ed" + strings.Repeat("00", 60),
 	}
 	resp.Sig = roshan.sign(resp.SigningInput())
 	if w := h.do(http.MethodPost, "/v1/introduction/respond", resp, nil); w.Code != http.StatusOK {
@@ -398,8 +399,9 @@ func TestWrongResponderMatchesUnknownRequest(t *testing.T) {
 	ir := protocol.IntroductionRequest{
 		NodeID: zro.nodeID, SignPub: zro.signPub, IssuedAt: now, Nonce: nextNonce(),
 		RequestID: reqID, TargetHandle: "roshan", FromHandle: "zro",
-		FromContactDescriptor: zro.contactDesc("zro", now),
-		ExpiresAt:             now + 60000,
+		FromSignPub:   zro.signPub,
+		SealedContact: "5ea1ed" + strings.Repeat("00", 60),
+		ExpiresAt:     now + 60000,
 	}
 	ir.Sig = zro.sign(ir.SigningInput())
 	if w := h.do(http.MethodPost, "/v1/introduction/request", ir, nil); w.Code != http.StatusAccepted {
@@ -439,8 +441,9 @@ func TestIntroductionToOfflineTargetIsNotFound(t *testing.T) {
 	ir := protocol.IntroductionRequest{
 		NodeID: zro.nodeID, SignPub: zro.signPub, IssuedAt: now, Nonce: nextNonce(),
 		RequestID: "11111111-2222-4333-8444-555555555555", TargetHandle: "ghost", FromHandle: "zro",
-		FromContactDescriptor: zro.contactDesc("zro", now),
-		ExpiresAt:             now + 60000,
+		FromSignPub:   zro.signPub,
+		SealedContact: "5ea1ed" + strings.Repeat("00", 60),
+		ExpiresAt:     now + 60000,
 	}
 	ir.Sig = zro.sign(ir.SigningInput())
 	w := h.do(http.MethodPost, "/v1/introduction/request", ir, nil)

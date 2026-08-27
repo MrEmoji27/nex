@@ -51,8 +51,9 @@ type Introduction struct {
 	TargetNodeID string
 	FromHandle   string
 	FromNodeID   string
-	FromContact  *descriptor.Contact
-	ExpiresAt    int64
+	// Sealed and opaque: the requester's address, encrypted to the target.
+	FromContact string
+	ExpiresAt   int64
 }
 
 // Expired reports whether the introduction has lapsed at nowMs.
