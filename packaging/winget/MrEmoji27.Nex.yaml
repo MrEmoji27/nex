@@ -1,5 +1,5 @@
 PackageIdentifier: MrEmoji27.Nex
-PackageVersion: 3.0.0-alpha.3
+PackageVersion: 3.0.0-alpha.4
 PackageName: Nex
 Publisher: Nex contributors
 License: AGPL-3.0-or-later
@@ -14,6 +14,6 @@ Tags:
 - decentralized
 PackageUrl: https://github.com/MrEmoji27/nex
 ProjectUrl: https://github.com/MrEmoji27/nex
-ReleaseNotesUrl: https://github.com/MrEmoji27/nex/releases/tag/v3.0.0-alpha.3
+ReleaseNotesUrl: https://github.com/MrEmoji27/nex/releases/tag/v3.0.0-alpha.4
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0

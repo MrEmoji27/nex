@@ -47,7 +47,7 @@ otherwise is worse than no table.
 irm https://raw.githubusercontent.com/MrEmoji27/nex/main/packaging/install.ps1 | iex
 ```
 
-It downloads [`v3.0.0-alpha.3`](https://github.com/MrEmoji27/nex/releases/tag/v3.0.0-alpha.3),
+It downloads [`v3.0.0-alpha.4`](https://github.com/MrEmoji27/nex/releases/tag/v3.0.0-alpha.4),
 checks its SHA256 before running it, and installs a global `nex` command.
 
 Every release so far is marked **pre-release**, and that is not a formality:

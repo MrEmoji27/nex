@@ -2,7 +2,7 @@
 ; Builds Nex-setup-<version>.exe: single binary + Start Menu shortcut + PATH.
 
 #define MyAppName "Nex"
-#define MyAppVersion "3.0.0-alpha.3"
+#define MyAppVersion "3.0.0-alpha.4"
 #define MyAppPublisher "Nex contributors"
 #define MyAppExeName "nex.exe"
 #define RepoRoot ".."

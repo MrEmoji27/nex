@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.0-alpha.4] - 2026-08-27
+
+### Summary
+
+One fix: the changelog screen inside the app. It had never worked in an
+installed build — not since it was added — because it went looking at runtime
+for a file the installer does not ship. Everything else is unchanged from
+alpha.3, including NAT traversal, which remains complete and unproven across two
+real networks.
+
+### Fixed
+
+- **The in-app changelog now shows the changelog.** It used to read a file from
+  the source tree at runtime, and that file is not part of what gets installed,
+  so anyone who installed Nex rather than cloning it saw "changelog unavailable"
+  and nothing else. The text is now built into the program itself, so there is
+  nothing to find and nothing to fail. It also reads the published changelog
+  rather than an old development copy that had stopped being updated, which is
+  the same one the website is generated from — the app and the site can no
+  longer disagree about what shipped.
+- **Long entries are no longer cut off mid-sentence.** Each line was being
+  sliced to the width of the window; it now wraps on word boundaries, and a
+  release summary is shown rather than only its bullet points.
+
+---
+
 ## [3.0.0-alpha.3] - 2026-08-27
 
 ### Summary

@@ -31,15 +31,25 @@ describe("the published changelog", () => {
     expect(versions.length).toBeGreaterThanOrEqual(10)
   })
 
-  test("the newest release keeps its date and its sections", () => {
+  test("the newest release keeps its version, date and sections", () => {
+    // Deliberately not pinned to a version: this asserts the shape of whatever
+    // is newest, so cutting a release does not break the parser's test. An
+    // earlier version of this test named alpha.3 and failed the moment alpha.4
+    // was written — which said nothing about the parser.
     const latest = entries[0]!
-    expect(latest.version).toBe("3.0.0-alpha.3")
-    expect(latest.date).toBe("2026-08-27")
-    const labels = latest.sections.map((s) => s.label)
+    expect(latest.version).toMatch(/^\d+\.\d+\.\d+/)
+    expect(latest.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(latest.sections.length).toBeGreaterThan(0)
+    expect(latest.sections.map((s) => s.label)).toContain("Summary")
+  })
+
+  test("a release with a limits section keeps it", () => {
+    // alpha.3 is the release whose honest headline is what does NOT work yet.
+    // An app showing only "Added" would be making a claim the notes do not.
+    const nat = entries.find((e) => e.version === "3.0.0-alpha.3")!
+    const labels = nat.sections.map((s) => s.label)
     expect(labels).toContain("Added")
     expect(labels).toContain("Fixed")
-    // The section that says what does NOT work yet. An app that showed only
-    // "Added" would be making a claim the release notes do not.
     expect(labels).toContain("Known limits")
   })
 
@@ -57,7 +67,8 @@ describe("the published changelog", () => {
   })
 
   test("a bullet folded across lines is joined, not truncated", () => {
-    const limits = entries[0]!.sections.find((s) => s.label === "Known limits")!
+    const nat = entries.find((e) => e.version === "3.0.0-alpha.3")!
+    const limits = nat.sections.find((s) => s.label === "Known limits")!
     const unproven = limits.items.find((i) => i.startsWith("NAT traversal is unproven"))
     expect(unproven).toBeTruthy()
     // The source folds this item over three lines; reading only the first would
