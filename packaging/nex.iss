@@ -2,7 +2,7 @@
 ; Builds Nex-setup-<version>.exe: single binary + Start Menu shortcut + PATH.
 
 #define MyAppName "Nex"
-#define MyAppVersion "3.0.0-alpha.1"
+#define MyAppVersion "3.0.0-alpha.2"
 #define MyAppPublisher "Nex contributors"
 #define MyAppExeName "nex.exe"
 #define RepoRoot ".."
@@ -37,6 +37,11 @@ Name: "addpath"; Description: "Add Nex to PATH (lets you run 'nex' from any term
 [Files]
 Source: "{#RepoRoot}\dist\nex.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#RepoRoot}\dist\README-FIRST.txt"; DestDir: "{app}"; Flags: ignoreversion
+; The audio sidecar. Voice needs a real sound card and a real Opus codec, which
+; the bundled runtime cannot provide, so it lives in its own process beside the
+; app. Without this file voice starts and then silently does nothing, which is
+; worse than voice being absent — so the build refuses to run if it is missing.
+Source: "{#RepoRoot}\audio\target\release\nex-audio.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Nex Chat"; Filename: "{app}\{#MyAppExeName}"; Comment: "Terminal-native p2p chat"

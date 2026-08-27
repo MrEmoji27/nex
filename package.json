@@ -1,6 +1,6 @@
 {
   "name": "nex",
-  "version": "3.0.0-alpha.1",
+  "version": "3.0.0-alpha.2",
   "description": "Terminal-native peer-to-peer communication. Two autonomous terminal peers, no central server.",
   "type": "module",
   "scripts": {

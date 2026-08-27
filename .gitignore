@@ -10,3 +10,7 @@ web/out/
 web/AGENTS.md
 web/CLAUDE.md
 web/
+
+# Internal notes stay local. Only doc/HOW-AND-WHY.md is published.
+doc/*
+!doc/HOW-AND-WHY.md

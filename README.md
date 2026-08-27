@@ -80,12 +80,20 @@ anyone is either; that is settled between the two nodes afterwards.
 /ask roshan
 ```
 
+## Why this exists
+
+[**How Nex was built, and what it is for**](doc/HOW-AND-WHY.md) — the thesis, what
+it costs, the three ways two people find each other, and the encryption bug that
+taught this project not to trust its own test suite.
+
 ## Layout
 
 ```
 src/          the client — identity, transport, rooms, voice, terminal UI
 rendezvous/   the optional discovery service (Go)
+audio/        native sidecar — capture, Opus, echo cancellation (Rust)
 tests/        unit suites, plus live multi-node smoke tests
+doc/          how and why this was built
 packaging/    Windows installer
 ```
 
