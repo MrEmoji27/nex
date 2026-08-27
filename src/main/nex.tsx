@@ -58,6 +58,7 @@ async function main() {
   const { NexTui } = await import("../ui/nex-tui")
 
   let app
+  let net: import("./node-app").NetDiagnostics | undefined
   let mock = false
   try {
     if (MODE === "mock" || process.env.NEX_MOCK === "1") {
@@ -68,6 +69,7 @@ async function main() {
       const { createNodeApp } = await import("./node-app")
       const built = await createNodeApp(common)
       app = built.app
+      net = built.net
     }
   } catch (err) {
     fail(err)
@@ -87,7 +89,7 @@ async function main() {
   if (mock) console.error("mock mode: scripted peers, nothing leaves this machine")
 
   renderer = await createCliRenderer({ exitOnCtrlC: false })
-  createRoot(renderer).render(<NexTui app={app} />)
+  createRoot(renderer).render(<NexTui app={app} net={net} />)
 }
 
 function fail(err: unknown): never {

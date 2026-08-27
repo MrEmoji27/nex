@@ -1,7 +1,15 @@
 // OpenTUI React interface: home screen + social shell.
 import { useKeyboard, useTerminalDimensions } from "@opentui/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { PeerInfo, RetentionPolicy, NexApp, RoomInvitation, RoomView } from "../core/contract.ts"
+import type {
+  IntroductionRequestView,
+  NexApp,
+  PeerInfo,
+  RetentionPolicy,
+  RoomInvitation,
+  RoomView,
+} from "../core/contract.ts"
+import type { NetDiagnostics } from "../main/node-app"
 import { Header } from "./header"
 import { PeoplePane } from "./people-pane"
 import { ChatPane } from "./chat-pane"
@@ -27,8 +35,8 @@ type Modal =
   | { kind: "verify"; peerId: string }
   | { kind: "settings" }
 
-export function NexTui(props: { app: NexApp }) {
-  const { app } = props
+export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
+  const { app, net } = props
   const ui = useNex(app)
   const { identity, status, peers, recentConversations, lastError, settings } = ui
   const { width, height } = useTerminalDimensions()
@@ -52,10 +60,10 @@ export function NexTui(props: { app: NexApp }) {
   const forwardCharRef = useRef<((ch: string) => void) | null>(null)
   const noticeTimerRef = useRef<Timer | undefined>(undefined)
 
-  const flashNotice = useCallback((message: string) => {
+  const flashNotice = useCallback((message: string, ms = 4_000) => {
     setNotice(message)
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current)
-    noticeTimerRef.current = setTimeout(() => setNotice(null), 4_000)
+    noticeTimerRef.current = setTimeout(() => setNotice(null), ms)
   }, [])
 
   // ---------- rooms & voice surfaces ----------
@@ -66,6 +74,8 @@ export function NexTui(props: { app: NexApp }) {
   // Neighbors heard via LAN beacon / intro (alpha.7) — polled lightly because
   // they arrive as events but also expire silently.
   const [discovered, setDiscovered] = useState(() => app.listDiscovered())
+  /** Introductions waiting on a human. Someone has to be able to /accept them. */
+  const [introductions, setIntroductions] = useState<IntroductionRequestView[]>([])
   useEffect(() => {
     setRooms(app.listRooms())
     setInvitations(app.listInvitations())
@@ -93,6 +103,20 @@ export function NexTui(props: { app: NexApp }) {
         }
       } else if (event.type === "discoveredLost") {
         setDiscovered(app.listDiscovered())
+      } else if (event.type === "introductionRequested") {
+        setIntroductions(app.listIntroductionRequests())
+        // Held on screen longer than a status blip: this one has to be read and
+        // answered, and the id is the argument.
+        flashNotice(
+          `${event.request.fromHandle} is looking for you — /accept ${event.request.requestId.slice(0, 8)}`,
+          20_000,
+        )
+      } else if (event.type === "introductionAnswered") {
+        setIntroductions(app.listIntroductionRequests())
+      } else if (event.type === "rendezvousChanged") {
+        const { connected, connectable, handle } = event.state
+        if (connectable && handle) flashNotice(`rendezvous: published as "${handle}"`)
+        else if (connected) flashNotice("rendezvous: connected, nothing published yet")
       } else if (
         event.type === "peerChanged" &&
         event.peer.status === "authenticating" &&
@@ -436,6 +460,109 @@ export function NexTui(props: { app: NexApp }) {
         } else if (cmd === "mute") {
           if (!activeRoom) flashNotice("no rooms — host one with /room <name>")
           else toggleMute()
+        } else if (cmd === "rendezvous") {
+          // "/rendezvous" reports; "/rendezvous off" stops; "/rendezvous on <url> <handle>".
+          const [mode = "", url = "", handle = ""] = arg.split(/\s+/)
+          if (!mode) {
+            const state = app.getRendezvousState()
+            flashNotice(
+              state.enabled
+                ? `rendezvous: ${state.connected ? "connected" : "offline"}${state.handle ? ` as "${state.handle}"` : ""}${state.connectable ? " · reachable" : " · not reachable"}`
+                : "rendezvous is off — /rendezvous on <url> <handle>",
+              8_000,
+            )
+          } else if (mode === "off") {
+            void app.setRendezvous(false).then(() => flashNotice("rendezvous off"))
+              .catch((err: Error) => flashNotice(`rendezvous: ${err.message}`))
+          } else if (mode === "on" && url && handle) {
+            flashNotice("rendezvous: publishing…")
+            void app
+              .setRendezvous(true, { baseUrl: url, handle })
+              .catch((err: Error) => flashNotice(`rendezvous: ${err.message}`, 8_000))
+          } else {
+            flashNotice("usage: /rendezvous on <url> <handle> | off")
+          }
+        } else if (cmd === "find") {
+          if (!arg) flashNotice("usage: /find <handle>")
+          else {
+            void app
+              .searchHandle(arg)
+              .then((found) =>
+                flashNotice(
+                  found
+                    ? `${found.handle} is here — ${found.connectable ? "reachable" : "not reachable"} · /ask ${found.handle}`
+                    : `nobody is registered as "${arg}"`,
+                  10_000,
+                ),
+              )
+              .catch((err: Error) => flashNotice(`find: ${err.message}`, 8_000))
+          }
+        } else if (cmd === "ask") {
+          if (!arg) flashNotice("usage: /ask <handle>")
+          else {
+            void app
+              .requestIntroduction(arg)
+              .then(() => flashNotice(`asked ${arg} for an introduction — waiting for them`, 10_000))
+              .catch((err: Error) => flashNotice(`ask: ${err.message}`, 8_000))
+          }
+        } else if (cmd === "accept" || cmd === "ignore") {
+          // Short ids are what the notice shows, so short ids are what this takes.
+          const pending = app.listIntroductionRequests()
+          const match = arg
+            ? pending.find((r) => r.requestId === arg || r.requestId.startsWith(arg))
+            : pending[0]
+          if (!match) {
+            flashNotice(pending.length === 0 ? "no introductions waiting" : `no introduction matching "${arg}"`)
+          } else {
+            const accept = cmd === "accept"
+            void app
+              .respondIntroduction(match.requestId, accept)
+              .then(() => {
+                setIntroductions(app.listIntroductionRequests())
+                flashNotice(
+                  accept
+                    ? `accepted ${match.fromHandle} — connecting directly`
+                    : `ignored ${match.fromHandle}`,
+                  8_000,
+                )
+              })
+              .catch((err: Error) => flashNotice(`${cmd}: ${err.message}`, 8_000))
+          }
+        } else if (cmd === "invite") {
+          void app
+            .createInvite(arg || undefined)
+            .then((code) => flashNotice(`${code} — paste this to them`, 30_000))
+            .catch((err: Error) => flashNotice(`invite: ${err.message}`))
+        } else if (cmd === "net") {
+          if (!net) flashNotice("this build has no UDP transport wired")
+          else {
+            const connected = peers.filter((p) => p.status === "connected")
+            const routes = connected
+              .map((p) => `${p.displayName ?? p.name}=${net.routeOf(p.peerId) ?? "?"}`)
+              .join(" ")
+            flashNotice(
+              `udp :${net.udpPort} · public ${net.publicCandidate ? `${net.publicCandidate.host}:${net.publicCandidate.port}` : "unknown"}${routes ? ` · ${routes}` : " · no peers"}`,
+              15_000,
+            )
+          }
+        } else if (cmd === "stun") {
+          if (!net) flashNotice("this build has no UDP transport wired")
+          else {
+            flashNotice("measuring…")
+            void net
+              .measure()
+              .then((report) =>
+                flashNotice(
+                  `${report.address ? `${report.address.host}:${report.address.port}` : "no answer"} — ${report.detail}`,
+                  20_000,
+                ),
+              )
+              .catch((err: Error) => flashNotice(`stun: ${err.message}`, 8_000))
+          }
+        } else {
+          // Unknown commands used to fall off the end of this chain and do
+          // nothing at all — no error, no hint, just a swallowed line.
+          flashNotice(`unknown command "/${cmd}"`)
         }
         return
       }
@@ -451,7 +578,7 @@ export function NexTui(props: { app: NexApp }) {
       }
       void send(value)
     },
-    [app, connectTo, cycleThemeById, flashNotice, selectedPeerId, selfInVoice, send],
+    [app, connectTo, cycleThemeById, flashNotice, net, peers, selectedPeerId, selfInVoice, send],
   )
 
   const lastSentRef = useRef<string | undefined>(undefined)
