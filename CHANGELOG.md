@@ -16,6 +16,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.0-alpha.5] - 2026-08-27
+
+### Summary
+
+The commands for finding someone by name now work inside the app. Until this
+release they existed only in headless mode, which meant the release about
+connecting through NAT could not be used from the screen most people open.
+Nothing about the connection itself changed, and it is still unproven across two
+real networks.
+
+### Added
+
+- **Finding people, from the app.** `/rendezvous on <url> <handle>` to publish
+  your name, `/find <handle>` to look someone up, `/ask <handle>` to request an
+  introduction, and `/accept` or `/ignore` to answer one. `/invite` prints a
+  code to paste to someone directly.
+- **When someone is looking for you**, a notice says so and carries the short id
+  to answer with. It stays on screen long enough to read, because it has to be
+  acted on rather than glanced at.
+- **`/net` and `/stun`** report which route each connection is using, the
+  address the internet sees you at, and what your router does to it — the same
+  information that turns "it did not connect" into a specific answer.
+
+### Fixed
+
+- **Unknown commands say so.** Anything the app did not recognise was silently
+  discarded — no error, no hint. Typing a command that did not exist was
+  indistinguishable from the app being broken.
+
+---
+
 ## [3.0.0-alpha.4] - 2026-08-27
 
 ### Summary
