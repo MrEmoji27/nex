@@ -1,6 +1,13 @@
 # Changelog
 
-> **Note:** `web/content/releases.ts` is generated from this file. When you change the changelog, regenerate the site copy so the two never disagree.
+> **This file has three readers.** The website's changelog page
+> (`web/content/releases.ts` in the `nex-site` repository) is written from it,
+> and the app embeds it at build time for its own changelog screen — so a
+> release entry has to be written *before* the installer is built, or the binary
+> ships without knowing what it is.
+>
+> There was briefly a second changelog at `doc/CHANGELOG.md`. It drifted, the
+> app read it instead of this one, and it was removed. Do not start another.
 
 All notable changes to this project are documented in this file.
 
