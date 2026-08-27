@@ -15,3 +15,9 @@ web/
 doc/*
 !doc/HOW-AND-WHY.md
 data/acceptance/
+
+# Local-only: editor state, agent scratch, browser snapshots, vault index.
+.obsidian/
+.playwright-mcp/
+.workers/
+NEX.md
