@@ -9,6 +9,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.0-alpha.3] - 2026-08-27
+
+### Summary
+
+Nex can now attempt a direct connection between two people who are both behind
+ordinary home routers, without either of them forwarding a port. That is what
+this release is for, and it is the honest headline: the machinery is complete
+and has not yet been proven across two real networks. Until it is, treat NAT
+traversal as untested rather than working.
+
+### Added
+
+- **Direct connections through NAT.** Two routers will not let each other's
+  packets in, because neither has been asked to. Nex now has both sides send at
+  the same moment, so each one's outgoing packet props the door open for the
+  other's — the technique is called hole punching. The moment both sides agree
+  on is the rendezvous introduction, which they both receive.
+- **Nex works out its own public address.** It asks a STUN server "what address
+  do you see me at?" and publishes the answer as somewhere peers can reach it.
+  The measurement is taken on the very socket peers will punch, because a public
+  address belongs to one specific local port; measured anywhere else it would
+  advertise a door that leads nowhere.
+- **A second transport.** Direct TCP is still there and is still preferred when
+  a peer can already be dialled — same Wi-Fi, or a forwarded port. UDP is used
+  when neither side can be dialled, which is the ordinary case across the
+  internet. Both end in the same place: the same encrypted handshake, the same
+  identity check, the same rules about who you are talking to.
+- **`/net` and `/stun` in headless mode** report which transport carries each
+  peer, the public address, and what the router does to it. `NEX_DEBUG_NET=1`
+  writes every step of a connection attempt to `net-diagnostics.log` under the
+  data directory, so a failure names a layer instead of being silence.
+
+### Fixed
+
+- **Messages sent the instant a connection formed could be lost — and worse.**
+  The handshake finishes immediately; deciding *who* the peer is takes a moment
+  longer because it reads from disk. A peer cannot see that gap, so they send.
+  Those messages were being discarded, and on the UDP transport discarding one
+  permanently desynchronised the encryption counters: every later message failed
+  to decrypt while the connection went on looking healthy. They are now held and
+  delivered in order once the identity check finishes.
+- **Two peers connecting at the same time could be confused for each other.**
+  An acknowledgement carrying a token we never sent could complete the wrong
+  peer's connection attempt, and an incoming probe was offered to every attempt
+  in flight rather than the one it belonged to. Neither could happen while
+  talking to a single peer; both are ordinary the moment there are two.
+
+### Known limits
+
+- **NAT traversal is unproven.** Everything so far has been tested on one
+  machine, which has no router in front of it. A connection that forms over a
+  private address crossed nothing.
+- **A router that assigns a new public port for every destination (symmetric
+  NAT) cannot be punched through.** Nex detects this and says so rather than
+  retrying forever. There is no relay fallback, by decision.
+- **One message must fit in one packet on the UDP path** — about 1180 bytes. A
+  longer message fails with an error rather than being silently cut in half.
+
+---
+
 ## [3.0.0-alpha.2] - 2026-08-27
 
 ### Summary
