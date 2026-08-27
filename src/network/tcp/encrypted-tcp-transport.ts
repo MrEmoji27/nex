@@ -30,6 +30,7 @@ import type {
 import { isKnownControl } from "../../core/contract"
 import type { StaticKeyRecord, StaticKeyStore } from "../../core/state/persistence"
 import { EPHEM_LEN, ENC_STATIC_LEN, NoiseHandshake } from "../noise/noise"
+import { resolveIdentityBinding as resolveSharedBinding } from "../../core/session/identity-binding"
 
 const DEFAULT_PORT = 42_000
 const MAX_PORT = 42_010
@@ -637,25 +638,16 @@ export class EncryptedTcpTransport implements P2PTransport {
    * identified; different -> mismatch (record kept, caller drops the link).
    */
   private async resolveIdentityBinding(conn: PeerConnection): Promise<void> {
-    const nodeId = conn.claimed!.nodeId
-    const presented = toHex(conn.handshake!.result.remoteStaticKey)
-    try {
-      const record: StaticKeyRecord | null = (await this.bindings?.get(nodeId)) ?? null
-      if (!record) {
-        const now = Date.now()
-        await this.bindings?.put({ nodeId, staticKey: presented, firstSeenAt: now, lastSeenAt: now })
-        conn.identityState = "unknown"
-        return
-      }
-      if (record.staticKey.toLowerCase() === presented.toLowerCase()) {
-        conn.identityState = "identified"
-        return
-      }
-      conn.identityState = "mismatch"
-    } catch (err) {
-      this.emitError("persistence", `binding store: ${err instanceof Error ? err.message : String(err)}`)
-      conn.identityState = "mismatch"
-    }
+    // Delegated to the shared implementation. TCP and UDP are two ways to move
+    // bytes; who is at the other end must be decided identically for both, and
+    // a second copy here is how the two would quietly diverge.
+    conn.identityState = await resolveSharedBinding(
+      conn.claimed!.nodeId,
+      toHex(conn.handshake!.result.remoteStaticKey),
+      this.bindings,
+      Date.now(),
+      (m) => this.emitError("persistence", m),
+    )
   }
 
   private dispatchOp(conn: PeerConnection, plaintext: Uint8Array): void {
