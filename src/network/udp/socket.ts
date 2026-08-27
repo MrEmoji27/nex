@@ -40,6 +40,8 @@ export interface UdpEndpointOptions {
   onConnected?(peerId: string, endpoint: Endpoint): void
   /** A peer stopped answering, or punching failed. */
   onLost?(peerId: string, reason: string): void
+  /** Developer diagnostics. Never carries payload bytes. */
+  log?(event: string, detail?: Record<string, unknown>): void
 }
 
 export class UdpEndpoint {
@@ -49,6 +51,8 @@ export class UdpEndpoint {
   private byEndpoint = new Map<string, string>()
   private timer: ReturnType<typeof setInterval> | null = null
   private boundPort = 0
+  /** Datagrams belonging to no peer, e.g. STUN answers. */
+  private unhandled = new Set<(data: Uint8Array, from: Endpoint) => void>()
 
   constructor(private readonly opts: UdpEndpointOptions) {}
 
@@ -115,11 +119,33 @@ export class UdpEndpoint {
         peer.endpoint = endpoint
         peer.puncher = null
         this.byEndpoint.set(key(endpoint), peerId)
+        this.opts.log?.("path_established", { peer: peerId, endpoint: key(endpoint) })
         this.opts.onConnected?.(peerId, endpoint)
       },
-      onFail: (reason) => this.lose(peerId, reason),
+      onFail: (reason) => {
+        this.opts.log?.("punch_failed", { peer: peerId, reason })
+        this.lose(peerId, reason)
+      },
     })
     this.peers.set(peerId, peer)
+    this.opts.log?.("punch_start", { peer: peerId, candidates: candidates.map(key) })
+  }
+
+  /**
+   * Write one datagram to an arbitrary address, outside any peer channel.
+   *
+   * This exists for STUN. Learning our public address has to happen on THIS
+   * socket: a mapping belongs to one local port, so an address measured
+   * anywhere else describes a port no peer will ever punch.
+   */
+  sendRaw(data: Uint8Array, to: Endpoint): void {
+    this.write(data, to)
+  }
+
+  /** Subscribe to datagrams that matched no peer and no puncher. */
+  onUnhandled(handler: (data: Uint8Array, from: Endpoint) => void): () => void {
+    this.unhandled.add(handler)
+    return () => this.unhandled.delete(handler)
   }
 
   /** Queue a payload. Fails loudly if the peer is not reachable yet. */
@@ -160,10 +186,20 @@ export class UdpEndpoint {
     // told, arriving from a different port than advertised — which is normal,
     // since the mapping is chosen by their router, not by them.
     if (data.length > 0 && (data[0] === FRAME_PUNCH || data[0] === FRAME_PUNCH_ACK)) {
-      for (const peer of this.peers.values()) {
-        if (peer.puncher) peer.puncher.onDatagram(data, from)
-      }
+      const punching = [...this.peers.values()].filter((p) => p.puncher)
+      // Route by host. The port will not match what was advertised, but the
+      // host does, and handing a punch to every waiting peer means whichever
+      // one is asked first claims an address that may belong to another.
+      const matched = punching.filter((p) => p.puncher!.hosts.includes(from.host))
+      // With nothing matching and exactly one attempt in flight there is no
+      // ambiguity to get wrong: a peer may legitimately arrive from an address
+      // it never advertised, which is the case punching exists for.
+      const targets = matched.length > 0 ? matched : punching.length === 1 ? punching : []
+      for (const peer of targets) peer.puncher!.onDatagram(data, from)
+      if (targets.length > 0) return
     }
+
+    for (const handler of this.unhandled) handler(data, from)
   }
 
   private lose(peerId: string, reason: string): void {

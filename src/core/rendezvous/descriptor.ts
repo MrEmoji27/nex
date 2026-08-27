@@ -160,3 +160,15 @@ export function dialAddresses(d: ContactDescriptor): string[] {
     .filter((c) => c.kind === "direct-tcp")
     .map((c) => (c.host.includes(":") ? `[${c.host}]:${c.port}` : `${c.host}:${c.port}`))
 }
+
+/**
+ * Punchable candidates, in published order.
+ *
+ * The wire contract leaves candidate kinds open and says unknown ones are
+ * ignored rather than rejected, which is what lets a v1 service carry these
+ * unchanged — to the service they are opaque strings inside a sealed blob it
+ * cannot read anyway.
+ */
+export function udpCandidates(d: ContactDescriptor): Array<{ host: string; port: number }> {
+  return d.candidates.filter((c) => c.kind === "udp").map((c) => ({ host: c.host, port: c.port }))
+}

@@ -66,6 +66,17 @@ export class HolePuncher {
     return this.settled
   }
 
+  /**
+   * Hosts this puncher is trying.
+   *
+   * A datagram from an unknown address has to be attributed to one of possibly
+   * several punchers, and the port will not match what was advertised — the
+   * peer's router chose it. The host still does, so it is what routing uses.
+   */
+  get hosts(): readonly string[] {
+    return this.opts.candidates.map((c) => c.host)
+  }
+
   /** Fire on every tick until something answers or time runs out. */
   tick(now: number): void {
     if (this.settled) return
@@ -104,9 +115,21 @@ export class HolePuncher {
       // against what they sent.
       const echo = data.subarray(11)
       this.opts.send(encodeFrame(FRAME_PUNCH_ACK, 0, 0, echo), from)
+    } else if (!sameBytes(data.subarray(11), this.token)) {
+      // An acknowledgement carrying a token we never sent belongs to somebody
+      // else's attempt. Accepting it would bind this peer to the wrong address
+      // while two punches are in flight at once — which is the normal case, not
+      // an exotic one, the moment a node is reaching two peers.
+      return
     }
 
     this.settled = true
     this.opts.onOpen(from)
   }
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
 }

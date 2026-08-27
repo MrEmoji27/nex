@@ -8,6 +8,7 @@ import type {
   ControlWire,
   ErrorScope,
   IdentityStore,
+  NatTraversal,
   NodeIdentity,
   PeerInfo,
   PeerRegistryStore,
@@ -69,7 +70,8 @@ import type {
 import { MockAudioSink, MockAudioSource, MockVoiceCodec, VoiceSession } from "./voice"
 import { generateIdentity, noisePublicKeyFromPrivate } from "./identity"
 import { RendezvousClient, browserSocketFactory, type ControlSocket } from "./rendezvous/client"
-import { dialAddresses, normalizeHandle, type ContactDescriptor } from "./rendezvous/descriptor"
+import { dialAddresses, normalizeHandle, udpCandidates, type ContactDescriptor } from "./rendezvous/descriptor"
+import { formatUdpAddress } from "./session/udp-address"
 
 /** Local alias for the pure machine's context shape. */
 interface RoomContextShape {
@@ -128,6 +130,15 @@ export interface NexAppOptions {
   conversations: ConversationStore
   registry: PeerRegistryStore
   transport: P2PTransport
+  /**
+   * NAT traversal, when the wired transport has it.
+   *
+   * Kept separate from `transport` because it is not part of moving bytes: it
+   * is what makes an address publishable and what lets the answering side of an
+   * introduction start punching without dialling. Omitted, everything still
+   * works between peers who can already reach each other.
+   */
+  nat?: NatTraversal
   /** Local preferences; omit for an in-memory default store. */
   settings?: SettingsStore
   /** Per-peer retention-agreement protocol state; omit for memory-only. */
@@ -770,6 +781,20 @@ export class NexAppImpl implements NexAppContract {
       return
     }
 
+    // Measure our public UDP address BEFORE the descriptor is built. Candidates
+    // are signed into it, so one published without a punchable address is one
+    // no peer behind a router can use, and the fix would be re-signing a
+    // descriptor the service has already handed out.
+    if (this.options.nat) {
+      const report = await this.options.nat.discoverPublicCandidate()
+      if (!report.address) {
+        this.emitError(
+          "rendezvous",
+          `could not learn this machine's public address: ${report.detail} — peers behind a router may not be able to reach you`,
+        )
+      }
+    }
+
     const client = new RendezvousClient({
       baseUrl: settings.baseUrl,
       identity: {
@@ -821,11 +846,43 @@ export class NexAppImpl implements NexAppContract {
   private rendezvousCandidates(): Array<{ kind: string; host: string; port: number }> {
     const port = this.lanPort || this.options.port || 42001
     const explicit = process.env.NEX_PUBLIC_ADDRESS?.trim()
+    const out: Array<{ kind: string; host: string; port: number }> = []
+
+    // UDP first. It is the one that works between two ordinary home networks,
+    // and a peer tries candidates in order.
+    const nat = this.options.nat
+    if (nat) {
+      // The public one, measured on the socket peers will actually punch. A
+      // mapping belongs to one local port, so an address learned anywhere else
+      // would advertise a door that leads nowhere.
+      const mapped = nat.publicCandidate
+      if (mapped) out.push({ kind: "udp", host: mapped.host, port: mapped.port })
+      // And the private one, which is what works when "across the internet"
+      // turns out to be the same building.
+      if (nat.port > 0) out.push({ kind: "udp", host: this.lanAddressHint(), port: nat.port })
+    }
+
     if (explicit) {
       const { host, port: explicitPort } = splitHostPort(explicit, port)
-      return [{ kind: "direct-tcp", host, port: explicitPort }]
+      out.push({ kind: "direct-tcp", host, port: explicitPort })
+    } else {
+      out.push({ kind: "direct-tcp", host: this.lanAddressHint(), port })
     }
-    return [{ kind: "direct-tcp", host: this.lanAddressHint(), port }]
+    return out
+  }
+
+  /**
+   * Start punching toward a peer we just accepted.
+   *
+   * Failure here is not an error the user needs to see: it means no UDP path
+   * opened, and the peer will fall back to whatever else they were told. It is
+   * logged as a transport notice and nothing else.
+   */
+  private beginPunch(descriptor: ContactDescriptor): void {
+    const nat = this.options.nat
+    const candidates = udpCandidates(descriptor)
+    if (!nat || candidates.length === 0) return
+    void nat.expect(descriptor.nodeId, candidates).catch(() => {})
   }
 
   private requireRendezvous(): RendezvousClient {
@@ -870,9 +927,14 @@ export class NexAppImpl implements NexAppContract {
     this.emitEvent({ type: "introductionAnswered", requestId, accept })
     if (!accept) return
     // Accepting released our address to them. Record theirs as a discovered
-    // candidate so the user can dial back, but do NOT dial automatically: they
-    // asked to reach us, so the inbound connection is theirs to open.
+    // candidate so the user can dial back, but do NOT dial: they asked to reach
+    // us, so the inbound connection is theirs to open.
     this.observeRendezvousPeer(entry.descriptor)
+    // Punching is the exception, and it is not a dial. Neither router will
+    // open unless both sides are sending at the same moment, and the accept we
+    // just sent is the only moment both sides agree on. So we start pushing at
+    // their address now and let them speak first.
+    this.beginPunch(entry.descriptor)
   }
 
   /** Inbound "someone is looking for you". Surfaced for a human to answer. */
@@ -929,7 +991,12 @@ export class NexAppImpl implements NexAppContract {
    * does for an unauthenticated LAN beacon.
    */
   private observeRendezvousPeer(descriptor: ContactDescriptor): DiscoveredPeer {
-    const [address] = dialAddresses(descriptor)
+    // Prefer the punchable address when they published one: across the internet
+    // it is usually the only one that can work, and it carries the nodeId so
+    // the Noise claim has something to be checked against.
+    const udp = udpCandidates(descriptor)
+    const [tcp] = dialAddresses(descriptor)
+    const address = this.options.nat && udp.length > 0 ? formatUdpAddress(descriptor.nodeId, udp) : tcp
     const { peer } = this.discovered.observe({
       peerId: descriptor.nodeId,
       name: descriptor.handle,

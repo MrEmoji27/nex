@@ -23,6 +23,9 @@ import {
 } from "../core/state/encrypted-stores"
 import { openVaultKey, PASSPHRASE_CREATED_WARNING, PASSPHRASE_BOOT_REMINDER } from "../core/state/vault"
 import { EncryptedTcpTransport } from "../network/tcp/encrypted-tcp-transport"
+import { UdpTransport } from "../network/udp/udp-transport"
+import { TransportSelector } from "../network/transport-selector"
+import { appendFileSync } from "node:fs"
 import { join } from "node:path"
 
 export interface NodeOptions {
@@ -51,6 +54,27 @@ export interface NodeAppResult {
   app: NexApp
   port: number | null
   storageSecurity: StorageSecurity
+  /**
+   * What the connection path is doing, for `/net` and for the acceptance test.
+   *
+   * A NAT failure and an application bug look identical from the outside — the
+   * peer simply never connects — so the parts that can be observed are exposed
+   * rather than guessed at from the outside.
+   */
+  net: NetDiagnostics
+}
+
+export interface NetDiagnostics {
+  /** Local UDP port peers punch. */
+  udpPort: number
+  /** Public address of that port, once STUN has answered. */
+  publicCandidate: { host: string; port: number } | null
+  /** What the router does to it, in plain language. */
+  natDetail: string
+  /** Which transport currently carries a peer, or null when it carries none. */
+  routeOf(peerId: string): "tcp" | "udp" | null
+  /** Measure the public address now. */
+  measure(): Promise<{ address: { host: string; port: number } | null; detail: string }>
 }
 
 /** Build a fully wired real node backed by disk state under dataDir. */
@@ -132,12 +156,36 @@ export async function createNodeApp(options: NodeOptions = {}): Promise<NodeAppR
   // v2: guarantee a long-term X25519 key exists for the encrypted transport.
   const secret = await ensureNoiseStaticKey(identityStore, identity, storedSecret)
 
-  const transport = new EncryptedTcpTransport({
+  // Diagnostics for the connection path, off unless asked for. It goes to a
+  // file rather than the console because the console belongs to the TUI: a
+  // stray line there does not read as a log, it corrupts the screen.
+  const diagnosticsFile = process.env.NEX_DEBUG_NET === "1" ? join(dataDir, "net-diagnostics.log") : null
+  const log = diagnosticsFile
+    ? (event: string, detail?: Record<string, unknown>) => {
+        try {
+          appendFileSync(diagnosticsFile, `${new Date().toISOString()} ${event} ${JSON.stringify(detail ?? {})}\n`)
+        } catch {
+          // Diagnostics must never be able to take the app down.
+        }
+      }
+    : undefined
+
+  const tcp = new EncryptedTcpTransport({
     identityPrivHex: secret.identityPrivHex!,
     bindings,
   })
+  const udp = new UdpTransport({
+    identityPrivHex: secret.identityPrivHex!,
+    // The same TOFU store both transports use. Two stores would be two answers
+    // to "who is this", and they would disagree the first time a peer switched
+    // path — which is the ordinary case, not an exotic one.
+    bindings,
+    log,
+  })
+  const transport = new TransportSelector(tcp, udp, { log })
 
   const app = await createNexApp({
+    nat: udp,
     identityStore,
     conversations,
     registry,
@@ -152,7 +200,24 @@ export async function createNodeApp(options: NodeOptions = {}): Promise<NodeAppR
     const fresh = await identityStore.loadSecret()
     if (fresh) await identityStore.save(app.identity, fresh)
   }
-  return { app, port: transport.port, storageSecurity }
+  return {
+    app,
+    port: transport.port,
+    storageSecurity,
+    net: {
+      get udpPort() {
+        return udp.port
+      },
+      get publicCandidate() {
+        return udp.publicCandidate
+      },
+      get natDetail() {
+        return udp.natDetailText
+      },
+      routeOf: (peerId: string) => transport.routeOf(peerId),
+      measure: () => udp.discoverPublicCandidate(),
+    },
+  }
 }
 
 

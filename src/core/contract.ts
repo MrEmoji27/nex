@@ -696,6 +696,37 @@ export interface P2PTransport extends TransportEvents, AsyncDisposable {
   onVoiceFrame?(callback: (fromPeerId: string, meta: VoiceFrameMeta, payload: Uint8Array) => void): Unsubscribe
 }
 
+/**
+ * The part of a transport that can cross NAT.
+ *
+ * Two machines behind home routers cannot dial each other, so the connection
+ * has to be arranged rather than opened: both sides send at the same moment and
+ * each one's outbound packet props the door for the other's. That needs two
+ * things the ordinary transport port has no room for — an address measured on
+ * the socket the peer will actually punch, and a way to start punching as the
+ * side that did NOT dial.
+ *
+ * Optional by design. A build with no traversal simply omits it and every
+ * connection stays direct, which is what happened before this existed.
+ */
+export interface NatTraversal {
+  /** The local UDP port peers will punch. */
+  readonly port: number
+  /** Public address of that port as the internet sees it, once measured. */
+  readonly publicCandidate: { host: string; port: number } | null
+  /** Plain-language summary of what the NAT does, for when a connection fails. */
+  readonly natDetailText: string
+  /** Measure the public address. Costs seconds; the caller decides when. */
+  discoverPublicCandidate(): Promise<{ address: { host: string; port: number } | null; detail: string }>
+  /**
+   * Punch toward a peer as the answering side, without dialling.
+   *
+   * The peer who asked for the introduction opens the handshake; this side only
+   * has to be sending at the same time, or neither router opens.
+   */
+  expect(nodeId: string, candidates: ReadonlyArray<{ host: string; port: number }>): Promise<PeerInfo>
+}
+
 /** Envelope metadata for one voice frame (kept tiny; audio rides beside it). */
 export interface VoiceFrameMeta {
   roomId: string

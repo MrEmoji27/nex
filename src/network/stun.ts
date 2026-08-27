@@ -301,3 +301,108 @@ export async function detectNat(
       "stops working before they can use it. This connection needs a relay.",
   }
 }
+
+// ---------- STUN over a socket we already own ----------
+//
+// Everything above opens its own socket, which is right for "what does the
+// internet see me as" and wrong for candidates. A NAT mapping belongs to one
+// local port: the address learned on a throwaway socket describes that
+// throwaway socket, and publishing it as a candidate advertises a door that
+// leads nowhere. A candidate is only true if it was measured on the very
+// socket the peer will punch.
+
+export interface DatagramPort {
+  /** Write one datagram. */
+  sendRaw(data: Uint8Array, to: { host: string; port: number }): void
+  /** Datagrams that belong to no peer — STUN answers arrive here. */
+  onUnhandled(handler: (data: Uint8Array, from: { host: string; port: number }) => void): () => void
+}
+
+/** Ask one server through a socket the caller owns. Null on timeout. */
+export async function stunQueryVia(
+  port: DatagramPort,
+  server: { host: string; port: number },
+  timeoutMs = 2500,
+): Promise<StunResult | null> {
+  const ip = await resolveV4(server.host)
+  if (!ip) return null
+  const { packet, txId } = buildRequest()
+
+  return new Promise<StunResult | null>((resolve) => {
+    let settled = false
+    const off = port.onUnhandled((data) => {
+      const mapped = parseResponse(data, txId)
+      // Transaction id match is the filter. Anything else arriving on this
+      // socket is somebody else's business, including another STUN query in
+      // flight at the same time.
+      if (!mapped || settled) return
+      settled = true
+      clearTimeout(timer)
+      off()
+      resolve({ host: mapped.host, port: mapped.port, localPort: 0, server: `${server.host}:${server.port}` })
+    })
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      off()
+      resolve(null)
+    }, timeoutMs)
+    try {
+      port.sendRaw(packet, { host: ip, port: server.port })
+    } catch {
+      // The timeout path reports it; a throw here is the same outcome.
+    }
+  })
+}
+
+/**
+ * The public address of a socket we own, plus what the NAT does to it.
+ *
+ * Both answers come from the same socket in one pass, because they are the same
+ * measurement: several servers, one local port. A cone NAT reports one public
+ * port to all of them and a punched hole survives; a symmetric NAT reports a
+ * different port per destination, so the candidate is stale before the peer can
+ * use it and punching cannot succeed.
+ */
+export async function discoverCandidateVia(
+  port: DatagramPort,
+  servers: ReadonlyArray<{ host: string; port: number }> = DEFAULT_STUN_SERVERS,
+  timeoutMs = 2500,
+): Promise<NatReport> {
+  const seen: Array<{ host: string; port: number }> = []
+  for (const server of servers.slice(0, 3)) {
+    const result = await stunQueryVia(port, server, timeoutMs)
+    if (result) seen.push({ host: result.host, port: result.port })
+  }
+
+  if (seen.length === 0) {
+    return { behaviour: "unknown", address: null, detail: "No STUN server answered. The network may block UDP." }
+  }
+  const address = seen[0]!
+  if (seen.length === 1) {
+    return { behaviour: "unknown", address, detail: "Only one server answered, so the mapping could not be compared." }
+  }
+  const hosts = new Set(seen.map((s) => s.host))
+  const ports = new Set(seen.map((s) => s.port))
+  if (hosts.size > 1) {
+    return {
+      behaviour: "symmetric",
+      address,
+      detail: "Different servers saw different public addresses. A direct connection is unlikely.",
+    }
+  }
+  if (ports.size === 1) {
+    return {
+      behaviour: "cone",
+      address,
+      detail: "Your router keeps one public port per local port, so a direct connection can be arranged.",
+    }
+  }
+  return {
+    behaviour: "symmetric",
+    address,
+    detail:
+      "Your router assigns a new public port for every destination, so an address shared with a peer " +
+      "stops working before they can use it. This connection needs a relay.",
+  }
+}

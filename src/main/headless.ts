@@ -5,6 +5,7 @@
 //
 // `runHeadless(options)` is the embeddable entry (used by the compiled `nex`
 // binary); running this file directly still works for repo development.
+import type { NetDiagnostics } from "./node-app"
 import type { NexApp, Unsubscribe } from "../core/contract.ts"
 import { parseArgs } from "./args"
 
@@ -20,21 +21,21 @@ export interface HeadlessOptions {
 
 async function loadApp(
   opts: HeadlessOptions,
-): Promise<{ app: NexApp; mock: boolean; boundPort?: number | null; storage?: string }> {
+): Promise<{ app: NexApp; mock: boolean; boundPort?: number | null; storage?: string; net?: NetDiagnostics }> {
   const PORT = opts.port ?? 42001
   if (opts.mock) {
     const { createMockApp } = await import("../network/mock-transport")
     return { app: await createMockApp({ port: PORT, name: opts.name }), mock: true }
   }
   const { createNodeApp } = await import("./node-app")
-  const { app, port, storageSecurity } = await createNodeApp({
+  const { app, port, storageSecurity, net } = await createNodeApp({
     name: opts.name,
     port: PORT,
     dataDir: opts.dataDir,
     passphrase: opts.passphrase,
     plaintext: opts.plaintext === true,
   })
-  return { app, mock: false, boundPort: port, storage: storageSecurity }
+  return { app, mock: false, boundPort: port, storage: storageSecurity, net }
 }
 
 function out(line: unknown): void {
@@ -47,6 +48,7 @@ interface HeadlessLoop {
   mock: boolean
   boundPort?: number | null
   storage?: string
+  net?: NetDiagnostics
   port: number
   selectedPeerIdRef: { current: string | null }
   selectedRoomIdRef: { current: string | null }
@@ -68,12 +70,13 @@ async function main(argv: readonly string[]): Promise<void> {
 
 export async function runHeadless(opts: HeadlessOptions): Promise<void> {
   const PORT = opts.port ?? 42001
-  const { app, mock, boundPort, storage } = await loadApp(opts)
+  const { app, mock, boundPort, storage, net } = await loadApp(opts)
   await runHeadlessLoop({
     app,
     mock,
     boundPort,
     storage,
+    net,
     port: PORT,
     selectedPeerIdRef: { current: null },
     selectedRoomIdRef: { current: null },
@@ -81,7 +84,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<void> {
 }
 
 async function runHeadlessLoop(loop: HeadlessLoop): Promise<void> {
-  const { app, mock, boundPort, storage, port: PORT } = loop
+  const { app, mock, boundPort, storage, net, port: PORT } = loop
   let selectedPeerId = loop.selectedPeerIdRef.current
 
   out({
@@ -244,6 +247,40 @@ async function runHeadlessLoop(loop: HeadlessLoop): Promise<void> {
       } catch (err) {
         out({ event: "error", scope: "transport", message: String(err instanceof Error ? err.message : err) })
       }
+      return
+    }
+    if (line === "/net") {
+      // What the connection path actually did. A NAT failure and an
+      // application bug look the same from outside — the peer just never
+      // connects — so this reports the parts that can be observed.
+      if (!net) {
+        out({ event: "net", available: false, reason: "this build has no UDP transport wired" })
+        return
+      }
+      const peers = await app.listPeers()
+      out({
+        event: "net",
+        available: true,
+        udpPort: net.udpPort,
+        publicCandidate: net.publicCandidate ? `${net.publicCandidate.host}:${net.publicCandidate.port}` : null,
+        nat: net.natDetail,
+        peers: peers.map((p) => ({ peerId: p.peerId, name: p.name, status: p.status, transport: net.routeOf(p.peerId) })),
+      })
+      return
+    }
+    if (line === "/stun") {
+      if (!net) {
+        out({ event: "stun", available: false })
+        return
+      }
+      const report = await net.measure()
+      out({
+        event: "stun",
+        available: true,
+        udpPort: net.udpPort,
+        address: report.address ? `${report.address.host}:${report.address.port}` : null,
+        detail: report.detail,
+      })
       return
     }
     if (line.startsWith("/peers")) {
