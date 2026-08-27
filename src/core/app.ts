@@ -68,6 +68,7 @@ import type {
   RendezvousStatusView,
 } from "./contract"
 import { MockAudioSink, MockAudioSource, MockVoiceCodec, VoiceSession } from "./voice"
+import { NativeVoiceIo, nativeVoiceAvailable } from "./native-voice"
 import { generateIdentity, noisePublicKeyFromPrivate } from "./identity"
 import { RendezvousClient, browserSocketFactory, type ControlSocket } from "./rendezvous/client"
 import { dialAddresses, normalizeHandle, udpCandidates, type ContactDescriptor } from "./rendezvous/descriptor"
@@ -1205,6 +1206,30 @@ export class NexAppImpl implements NexAppContract {
 
   private async startVoiceSession(room: RoomView): Promise<VoiceSession> {
     const app = this
+    // The native sidecar captures from a real microphone and encodes Opus in
+    // its own process. Without it the mocks below produce silence — a call that
+    // connects, shows participants, exchanges frames and carries no audio,
+    // which is exactly what shipped until now: native-voice.ts existed and
+    // nothing imported it.
+    let encoded: NativeVoiceIo | undefined
+    if (nativeVoiceAvailable()) {
+      try {
+        encoded = new NativeVoiceIo()
+      } catch (err) {
+        this.emitError("transport", `voice: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+    // Said out loud either way. Silent audio is impossible to diagnose from the
+    // outside, and "the call connected" is not the same claim as "you can hear
+    // them".
+    this.emitEvent({
+      type: "notice",
+      scope: "rooms",
+      message: encoded
+        ? "voice: microphone live"
+        : "voice: no audio device bridge found — the call will connect but carry silence",
+    })
+
     const source = new MockAudioSource()
     const sink = new MockAudioSink()
     const codec = new MockVoiceCodec()
@@ -1214,6 +1239,7 @@ export class NexAppImpl implements NexAppContract {
       source,
       sink,
       codec,
+      encoded,
       send: {
         targets(): string[] {
           // Star topology: members ship everything UP to the host;

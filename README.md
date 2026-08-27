@@ -50,6 +50,12 @@ irm https://raw.githubusercontent.com/MrEmoji27/nex/main/packaging/install.ps1 |
 It downloads [`v3.0.0-alpha.9`](https://github.com/MrEmoji27/nex/releases/tag/v3.0.0-alpha.9),
 checks its SHA256 before running it, and installs a global `nex` command.
 
+**Use alpha.9 or newer.** Every earlier release has at least one fault that
+makes the app look broken — commands that appeared to do nothing, an input line
+that refused them, a version number that named the wrong build. The older tags
+are still on the releases page, labelled, because deleting something people may
+have downloaded is worse than saying plainly that it is superseded.
+
 Every release so far is marked **pre-release**, and that is not a formality:
 this is an untested alpha and it will have bugs. GitHub only shows a "latest
 release" card for a release that is *not* marked pre-release, so this repository

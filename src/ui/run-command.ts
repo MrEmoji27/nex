@@ -325,6 +325,64 @@ async function dispatch(cmd: string, arg: string, ctx: CommandContext): Promise<
       return
     }
 
+    // ---------- calling ----------
+    //
+    // A voice call used to cost three commands, a hex room id read off a notice
+    // that expired, and an invisible notion of which room was "active". All of
+    // that is machinery; the thing a person wants is to talk to someone. /call
+    // does the machinery.
+    case "call": {
+      if (arg) {
+        const peer = resolvePeer(arg, ctx)
+        if (!peer) {
+          log(`no one here called "${arg}" — /peers lists who is connected`, "bad")
+          return
+        }
+        if (peer.status !== "connected") {
+          log(`${peer.displayName ?? peer.name} is ${peer.status}, so they cannot be called yet`, "bad")
+          return
+        }
+        const existing = ctx.rooms.find((r) => r.members.some((m) => m.peerId === peer.peerId))
+        const room = existing ?? (await app.createRoom(callName(ctx, peer.displayName ?? peer.name), [peer.peerId]))
+        await app.setVoiceActive(room.roomId, true)
+        log(`calling ${peer.displayName ?? peer.name}… they answer with /call`)
+        return
+      }
+
+      // No argument: answer. An invitation is someone calling you.
+      const invitation = ctx.invitations[0]
+      if (invitation) {
+        const room = await app.joinRoom(invitation.roomId)
+        await app.setVoiceActive(room.roomId, true)
+        log(`joined ${invitation.hostName ?? "the call"}`)
+        return
+      }
+      const only = ctx.activeRoom ?? (ctx.rooms.length === 1 ? ctx.rooms[0]! : null)
+      if (!only) {
+        log(
+          ctx.rooms.length > 1
+            ? "several rooms — /call <who>, or /rooms to see them"
+            : "nobody is calling — /call <who> to start one",
+          "bad",
+        )
+        return
+      }
+      await app.setVoiceActive(only.roomId, true)
+      log(`joined voice in "${only.name}"`)
+      return
+    }
+
+    case "hangup": {
+      const room = ctx.activeRoom ?? (ctx.rooms.length === 1 ? ctx.rooms[0]! : null)
+      if (!room) {
+        log("not in a call", "bad")
+        return
+      }
+      await app.setVoiceActive(room.roomId, false)
+      log("left the call")
+      return
+    }
+
     // ---------- rooms & voice ----------
     case "room": {
       const [roomName = "", inviteList = ""] = arg.split(":").map((part) => part.trim())
@@ -347,7 +405,12 @@ async function dispatch(cmd: string, arg: string, ctx: CommandContext): Promise<
     }
 
     case "join": {
-      const invitation = ctx.invitations.find((i) => i.roomId === arg || i.roomName === arg)
+      // With one invitation waiting there is nothing to disambiguate, and
+      // making someone retype an eight-character hex id off a notice that has
+      // already expired is not a design.
+      const invitation = arg
+        ? ctx.invitations.find((i) => i.roomId === arg || i.roomName === arg)
+        : ctx.invitations[0]
       if (!invitation) {
         log(ctx.invitations.length === 0 ? "no invitations — wait for a host to invite you" : `no invitation matching "${arg}"`, "bad")
         return
@@ -405,8 +468,8 @@ async function dispatch(cmd: string, arg: string, ctx: CommandContext): Promise<
     }
 
     case "voice": {
-      if (!ctx.activeRoom) {
-        log("no active room — host one with /room <name>", "bad")
+      if (!ctx.activeRoom && ctx.rooms.length !== 1) {
+        log(ctx.rooms.length === 0 ? "no rooms — /call <who> instead" : "several rooms — /call <who>", "bad")
         return
       }
       ctx.toggleVoice()
@@ -426,4 +489,19 @@ async function dispatch(cmd: string, arg: string, ctx: CommandContext): Promise<
       // Unreachable: the registry check in runCommand already rejected it.
       log(`"/${cmd}" is listed but not implemented`, "bad")
   }
+}
+
+/** Find a peer by display name, name, or the start of their node id. */
+function resolvePeer(token: string, ctx: CommandContext) {
+  const needle = token.toLowerCase()
+  return (
+    ctx.peers.find((p) => (p.displayName ?? p.name).toLowerCase() === needle) ??
+    ctx.peers.find((p) => p.name.toLowerCase() === needle) ??
+    ctx.peers.find((p) => p.peerId.toLowerCase().startsWith(needle))
+  )
+}
+
+/** A room name a human would recognise afterwards, rather than a hex id. */
+function callName(ctx: CommandContext, them: string): string {
+  return `${ctx.app.identity.name} & ${them}`
 }

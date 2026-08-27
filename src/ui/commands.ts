@@ -51,6 +51,15 @@ export const COMMANDS: readonly CommandSpec[] = [
   { name: "rename", args: "<name>", summary: "rename the selected contact, in your copy only", group: "people" },
   { name: "disconnect", summary: "drop the selected peer", group: "people" },
 
+  // ---- talking ----
+  {
+    name: "call",
+    args: "[who]",
+    summary: "start a voice call, or answer the one you were invited to",
+    group: "rooms & voice",
+  },
+  { name: "hangup", summary: "leave the call", group: "rooms & voice" },
+
   // ---- rooms & voice ----
   { name: "room", args: "<name>[:peer,peer]", summary: "host a room and invite people", group: "rooms & voice" },
   { name: "join", args: "<id>", summary: "accept a room invitation", group: "rooms & voice" },

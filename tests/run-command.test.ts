@@ -210,6 +210,91 @@ describe("finding people", () => {
   })
 })
 
+describe("calling someone", () => {
+  // A call used to cost /room name:peer, then an 8-char hex id read off an
+  // expiring notice, then /join, then /voice — with an invisible notion of
+  // which room was "active". The point of /call is that none of that is the
+  // user's problem.
+  const peer = { peerId: "B".repeat(64), name: "roshan", status: "connected" as const }
+
+  test("/call <who> creates the room, invites them and opens voice", async () => {
+    const created: Array<{ name: string; invited: string[] }> = []
+    const voiced: Array<{ roomId: string; active: boolean }> = []
+    const h = harness({ peers: [peer] }, {
+      createRoom: async (name: string, invited: string[]) => {
+        created.push({ name, invited })
+        return { roomId: "r00m", name, members: [], voice: { participants: [] } }
+      },
+      setVoiceActive: async (roomId: string, active: boolean) => {
+        voiced.push({ roomId, active })
+      },
+    } as unknown as Partial<NexApp>)
+
+    await runCommand("/call roshan", h.ctx)
+    expect(created).toHaveLength(1)
+    expect(created[0]!.invited).toEqual([peer.peerId])
+    expect(voiced).toEqual([{ roomId: "r00m", active: true }])
+    expect(h.said()).toContain("calling roshan")
+  })
+
+  test("/call names the room after the people in it, not a hex id", async () => {
+    const names: string[] = []
+    const h = harness({ peers: [peer] }, {
+      createRoom: async (name: string) => {
+        names.push(name)
+        return { roomId: "r00m", name, members: [], voice: { participants: [] } }
+      },
+      setVoiceActive: async () => {},
+    } as unknown as Partial<NexApp>)
+    await runCommand("/call roshan", h.ctx)
+    expect(names[0]).toBe("zemo & roshan")
+  })
+
+  test("/call with no argument answers an invitation", async () => {
+    const joined: string[] = []
+    const h = harness(
+      { invitations: [{ roomId: "r00m", roomName: "call", hostPeerId: "B".repeat(64), hostName: "roshan" }] },
+      {
+        joinRoom: async (id: string) => {
+          joined.push(id)
+          return { roomId: id, name: "call" }
+        },
+        setVoiceActive: async () => {},
+      } as unknown as Partial<NexApp>,
+    )
+    await runCommand("/call", h.ctx)
+    expect(joined).toEqual(["r00m"])
+    expect(h.said()).toContain("joined roshan")
+  })
+
+  test("calling someone who is not connected says so, rather than making a room nobody joins", async () => {
+    const h = harness({ peers: [{ ...peer, status: "offline" as const }] })
+    await runCommand("/call roshan", h.ctx)
+    expect(h.said()).toContain("offline")
+  })
+
+  test("calling a name that is not here does not silently do nothing", async () => {
+    const h = harness()
+    await runCommand("/call nobody", h.ctx)
+    expect(h.said()).toContain("/peers")
+  })
+
+  test("/join with no argument takes the only invitation", async () => {
+    const joined: string[] = []
+    const h = harness(
+      { invitations: [{ roomId: "only", roomName: "lounge", hostPeerId: "B".repeat(64), hostName: "roshan" }] },
+      {
+        joinRoom: async (id: string) => {
+          joined.push(id)
+          return { roomId: id, name: "lounge" }
+        },
+      } as unknown as Partial<NexApp>,
+    )
+    await runCommand("/join", h.ctx)
+    expect(joined).toEqual(["only"])
+  })
+})
+
 describe("commands that need something selected", () => {
   test("/rename says which rename this is", async () => {
     // /rename renames a contact and /name renames you. Confusing the two is
