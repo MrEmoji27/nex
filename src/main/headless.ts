@@ -327,6 +327,20 @@ async function runHeadlessLoop(loop: HeadlessLoop): Promise<void> {
       out({ event: "verified", peerId: selectedPeerId, verified: arg === "yes" })
       return
     }
+    if (line === "/name" || line.startsWith("/name ")) {
+      const arg = line.slice("/name".length).trim()
+      if (!arg) {
+        out({ event: "name", name: app.identity.name })
+        return
+      }
+      try {
+        await app.setDisplayName(arg)
+        out({ event: "name", name: app.identity.name })
+      } catch (err) {
+        out({ event: "error", scope: "identity", message: String(err instanceof Error ? err.message : err) })
+      }
+      return
+    }
     if (line.startsWith("/rename ")) {
       const newName = line.slice("/rename ".length).trim()
       if (!selectedPeerId) {

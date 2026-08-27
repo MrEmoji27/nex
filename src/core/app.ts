@@ -541,6 +541,24 @@ export class NexAppImpl implements NexAppContract {
     return peer
   }
 
+  async setDisplayName(name: string): Promise<void> {
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error("a name cannot be empty")
+    if (trimmed.length > 32) throw new Error("a name is at most 32 characters")
+    const identity = this.identity
+    if (identity.name === trimmed) return
+
+    // Persist BEFORE announcing. A name that only exists in memory is a name
+    // that disappears on the next launch, and the user would have no way to
+    // tell which one the peer actually saw.
+    const secret = await this.options.identityStore.loadSecret?.()
+    if (!secret) throw new Error("identity secret unavailable; cannot rename")
+    identity.name = trimmed
+    await this.options.identityStore.save(identity, secret)
+    this.identityValue = identity
+    this.emitEvent({ type: "identityLoaded", identity })
+  }
+
   async createInvite(address?: string): Promise<string> {
     // Callers pass either a bare host ("100.64.0.2") or a full "host:port".
     // Appending our own port to the latter produced "host:port:port", which

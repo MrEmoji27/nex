@@ -528,6 +528,14 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
               })
               .catch((err: Error) => flashNotice(`${cmd}: ${err.message}`, 8_000))
           }
+        } else if (cmd === "name") {
+          if (!arg) flashNotice(`you are "${identity?.name ?? "unnamed"}" — /name <new name>`, 8_000)
+          else {
+            void app
+              .setDisplayName(arg)
+              .then(() => flashNotice(`you are now "${arg}" — peers see this when they meet you`, 8_000))
+              .catch((err: Error) => flashNotice(`name: ${err.message}`, 8_000))
+          }
         } else if (cmd === "invite") {
           void app
             .createInvite(arg || undefined)
@@ -578,7 +586,7 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
       }
       void send(value)
     },
-    [app, connectTo, cycleThemeById, flashNotice, net, peers, selectedPeerId, selfInVoice, send],
+    [app, connectTo, cycleThemeById, flashNotice, identity, net, peers, selectedPeerId, selfInVoice, send],
   )
 
   const lastSentRef = useRef<string | undefined>(undefined)

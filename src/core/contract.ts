@@ -492,6 +492,19 @@ export interface NexApp extends AsyncDisposable {
   setVerified(peerId: string, verified: boolean): Promise<void>
   /** Set a local-only display name for a contact; empty string clears it. Persists locally. */
   renameContact(peerId: string, displayName: string): Promise<void>
+
+  /**
+   * Change OUR display name — what peers are shown when they meet us.
+   *
+   * The nodeId does not move: identity is the key, and the name is a label on
+   * top of it. Renaming yourself is therefore cosmetic and safe, unlike
+   * anything that touches the key.
+   *
+   * Peers already connected keep the old label until they meet us again; the
+   * name travels inside the handshake, so there is nowhere to push it mid-link
+   * without inventing a protocol message for it.
+   */
+  setDisplayName(name: string): Promise<void>
   /**
    * Security properties of the active transport, for honest status display (spec §21.5).
    * "none" = transport provides no encryption (raw TCP); UI must say NO ENCRYPTION.

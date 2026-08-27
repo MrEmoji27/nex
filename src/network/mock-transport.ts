@@ -338,6 +338,16 @@ export async function createMockApp(options: MockAppOptions = {}): Promise<NexAp
       emit({ type: "peerChanged", peer: { ...peer } })
     },
 
+    async setDisplayName(name: string) {
+      // Demo mode has no identity store, so this lives only as long as the
+      // session does — enough to show the command working, and it says so by
+      // simply not persisting rather than by pretending to.
+      const trimmed = name.trim()
+      if (!trimmed) throw new Error("a name cannot be empty")
+      identity.name = trimmed
+      emit({ type: "identityLoaded", identity: { ...identity } })
+    },
+
     async renameContact(peerId, displayName) {
       const peer = peers.get(peerId)
       if (!peer) throw new Error(`unknown peer ${peerId}`)
