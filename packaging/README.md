@@ -32,10 +32,10 @@ irm https://raw.githubusercontent.com/MrEmoji27/nex/main/packaging/install.ps1 |
 ## 3. Manual Download (Windows)
 
 1. Go to [Releases](https://github.com/MrEmoji27/nex/releases)
-2. Download `Nex-setup-3.0.0-alpha.7.exe`
+2. Download `Nex-setup-3.0.0-alpha.8.exe`
 3. Verify SHA256: `57d6ca51f7dfa152b5e420c70f86690aaad8ea1c3f27cc8372b8bc138a36d487`
    ```powershell
-   Get-FileHash Nex-setup-3.0.0-alpha.7.exe -Algorithm SHA256
+   Get-FileHash Nex-setup-3.0.0-alpha.8.exe -Algorithm SHA256
    ```
 4. Run the installer (adds to user PATH, creates Start Menu shortcuts)
 
@@ -54,7 +54,7 @@ curl -fsSL https://raw.githubusercontent.com/MrEmoji27/nex/main/packaging/instal
 - Cleans up temp files
 - Requires macOS or Linux + `curl` + `sha256sum`/`shasum`
 
-> **Important:** As of `v3.0.0-alpha.7`, **no macOS or Linux binaries are published yet**. The script will detect this and exit with instructions to build from source (see below). When binaries are published, the same command will download and install them.
+> **Important:** As of `v3.0.0-alpha.8`, **no macOS or Linux binaries are published yet**. The script will detect this and exit with instructions to build from source (see below). When binaries are published, the same command will download and install them.
 
 ---
 
@@ -80,8 +80,8 @@ tar -xzf dist/nex-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x
 
 1. Tag the release:
    ```bash
-   git tag -a v3.0.0-alpha.7 -m "Nex 3.0.0-alpha.7"
-   git push origin v3.0.0-alpha.7
+   git tag -a v3.0.0-alpha.8 -m "Nex 3.0.0-alpha.8"
+   git push origin v3.0.0-alpha.8
    ```
 
 2. Build the Windows installer:
@@ -89,7 +89,7 @@ tar -xzf dist/nex-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x
    cd packaging
    ./build-installer.sh
    ```
-   Outputs `../dist/Nex-setup-3.0.0-alpha.7.exe`
+   Outputs `../dist/Nex-setup-3.0.0-alpha.8.exe`
 
 3. Build the macOS/Linux archives:
    ```bash

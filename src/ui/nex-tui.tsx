@@ -21,6 +21,8 @@ import { VerifyModal } from "./verify-modal"
 import { HomeScreen } from "./home-screen"
 import { SettingsModal, RETENTION_ORDER, nextIn } from "./settings-modal"
 import { ChangelogModal } from "./changelog-modal"
+import { CommandPanel, type LogLine } from "./command-panel"
+import { runCommand } from "./run-command"
 import { VoiceStrip } from "./voice-strip"
 import { MotionScope, animsEnabled } from "./use-tick"
 import { setActiveTheme, THEMES, getTheme, colors } from "./theme"
@@ -56,9 +58,23 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
   const [connectError, setConnectError] = useState<string | null>(null)
   /** Transient user-facing notice (bad command, etc.), shown in red on the footer. */
   const [notice, setNotice] = useState<string | null>(null)
+  /** What is being typed, so the panel above the input can preview commands. */
+  const [draft, setDraft] = useState("")
+  /**
+   * What commands actually said, kept on screen.
+   *
+   * The footer was the wrong home for this: one truncated line for four
+   * seconds, which reads as nothing happening at all.
+   */
+  const [commandLog, setCommandLog] = useState<LogLine[]>([])
   // Registered by InputLine so panes can hand a typed character to the field.
   const forwardCharRef = useRef<((ch: string) => void) | null>(null)
   const noticeTimerRef = useRef<Timer | undefined>(undefined)
+
+  /** Command output. Stays until pushed off by newer lines. */
+  const log = useCallback((text: string, tone: "ok" | "bad" = "ok") => {
+    setCommandLog((prev) => [...prev, { text, tone, at: Date.now() }].slice(-24))
+  }, [])
 
   const flashNotice = useCallback((message: string, ms = 4_000) => {
     setNotice(message)
@@ -357,223 +373,37 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
   const handleSubmit = useCallback(
     (value: string) => {
       if (value.startsWith("/")) {
-        const [cmd = "", ...rest] = value.slice(1).split(/\s+/)
-        const arg = rest.join(" ").trim()
-        if (cmd === "connect" && arg) void connectTo(arg)
-        else if (cmd === "disconnect" && selectedPeerId) void app.disconnect(selectedPeerId)
-        else if (cmd === "ping" && selectedPeerId) void app.pingPeer(selectedPeerId)
-        else if (cmd === "trust" && selectedPeerId && (arg === "on" || arg === "off")) {
-          void app.setVerified(selectedPeerId, arg === "on")
-        } else if (cmd === "verify" && selectedPeerId) {
-          setModal({ kind: "verify", peerId: selectedPeerId })
-        } else if (cmd === "rename" && selectedPeerId) {
-          void app.renameContact(selectedPeerId, arg)
-        } else if (cmd === "peers") void app.listPeers()
-        else if (cmd === "theme") {
-          if (!arg) {
-            setModal({ kind: "settings" })
-          } else {
-            const needle = arg.toLowerCase()
-            const match = THEMES.find(
-              (t) => t.id === needle || t.name.toLowerCase().startsWith(needle),
-            ) ?? THEMES.find((t) => t.name.toLowerCase().includes(needle))
+        // Dispatch lives in run-command.ts so it can be tested without a
+        // terminal, and so every result reports through one place.
+        void runCommand(value, {
+          app,
+          net,
+          selectedPeerId,
+          peers,
+          rooms,
+          invitations,
+          activeRoom: activeRoom ?? null,
+          log,
+          openModal: (kind) => {
+            if (kind === "verify" && selectedPeerId) setModal({ kind: "verify", peerId: selectedPeerId })
+            else if (kind === "settings") setModal({ kind: "settings" })
+            else if (kind === "add-peer") setModal({ kind: "add-peer" })
+          },
+          connectTo: (address) => void connectTo(address),
+          applyTheme: (needle) => {
+            const lower = needle.toLowerCase()
+            const match =
+              THEMES.find((t) => t.id === lower || t.name.toLowerCase().startsWith(lower)) ??
+              THEMES.find((t) => t.name.toLowerCase().includes(lower))
             if (match) cycleThemeById(match.id)
-            else flashNotice(`unknown theme "${arg}" — try /themes`)
-          }
-        } else if (cmd === "themes") {
-          // Listed in the settings modal; keep as a no-op hint.
-          setModal({ kind: "settings" })
-        } else if (cmd === "retention") {
-          if (["24h", "7d", "forever"].includes(arg)) {
-            void app.setRetention(arg as RetentionPolicy)
-          } else {
-            flashNotice("usage: /retention 24h|7d|forever")
-          }
-        } else if (cmd === "room" && arg) {
-          // /room <name>[:peerId,peerId] — host a room and invite listed peers.
-          const [roomName = "", inviteList = ""] = arg.split(":").map((part) => part.trim())
-          if (!roomName) {
-            flashNotice("usage: /room <name>[:peerId,peerId]")
-            return
-          }
-          const ids = inviteList
-            .split(",")
-            .map((token) => token.trim())
-            .filter(Boolean)
-            .flatMap((token) => {
-              const peer = peers.find(
-                (p) => p.peerId === token || p.name === token || p.displayName === token,
-              )
-              if (!peer) {
-                flashNotice(`unknown peer "${token}" — see /peers`)
-                return []
-              }
-              return [peer.peerId]
-            })
-          void app
-            .createRoom(roomName, ids)
-            .then((room) => flashNotice(`room "${room.name}" hosted (${room.roomId})`))
-            .catch((err: Error) => flashNotice(`room: ${err.message}`))
-        } else if (cmd === "join") {
-          // /join <roomId> — accept an invitation (host link must exist).
-          const invitation = invitations.find((i) => i.roomId === arg)
-          if (!invitation) {
-            flashNotice("no such invitation — waiting for the host to invite you")
-            return
-          }
-          void app
-            .joinRoom(invitation.roomId)
-            .then(() => flashNotice(`joined "${invitation.roomName}"`))
-            .catch((err: Error) => flashNotice(`join: ${err.message}`))
-        } else if (cmd === "rooms") {
-          if (rooms.length === 0) flashNotice("no rooms — host one with /room <name>")
-          else
-            for (const room of rooms) {
-              const voiceActive = room.voice.participants.length > 0
-              flashNotice(
-                `${room.roomId} · ${room.name} · ${room.members.length} member${room.members.length === 1 ? "" : "s"}${voiceActive ? ` · voice: ${room.voice.participants.length} in channel` : ""}`,
-              )
-            }
-        } else if (cmd === "leave") {
-          const target = rooms.find((r) => r.roomId === arg || r.name === arg)
-          if (!target) flashNotice("usage: /leave <roomId|name>")
-          else
-            void app
-              .leaveRoom(target.roomId)
-              .then(() => flashNotice(`left "${target.name}"`))
-              .catch((err: Error) => flashNotice(`leave: ${err.message}`))
-        } else if (cmd === "close") {
-          const target = rooms.find((r) => r.roomId === arg || r.name === arg)
-          if (!target) flashNotice("usage: /close <roomId|name>")
-          else
-            void app
-              .closeRoom(target.roomId)
-              .then(() => flashNotice(`closed "${target.name}" for everyone`))
-              .catch((err: Error) => flashNotice(`close: ${err.message}`))
-        } else if (cmd === "say" && arg && activeRoom) {
-          void app
-            .sendRoomMessage(activeRoom.roomId, arg)
-            .catch((err: Error) => flashNotice(`room: ${err.message}`))
-        } else if (cmd === "voice") {
-          if (!activeRoom) flashNotice("no rooms — host one with /room <name>")
-          else toggleVoice()
-        } else if (cmd === "mute") {
-          if (!activeRoom) flashNotice("no rooms — host one with /room <name>")
-          else toggleMute()
-        } else if (cmd === "rendezvous") {
-          // "/rendezvous" reports; "/rendezvous off" stops; "/rendezvous on <url> <handle>".
-          const [mode = "", url = "", handle = ""] = arg.split(/\s+/)
-          if (!mode) {
-            const state = app.getRendezvousState()
-            flashNotice(
-              state.enabled
-                ? `rendezvous: ${state.connected ? "connected" : "offline"}${state.handle ? ` as "${state.handle}"` : ""}${state.connectable ? " · reachable" : " · not reachable"}`
-                : "rendezvous is off — /rendezvous on <url> <handle>",
-              8_000,
-            )
-          } else if (mode === "off") {
-            void app.setRendezvous(false).then(() => flashNotice("rendezvous off"))
-              .catch((err: Error) => flashNotice(`rendezvous: ${err.message}`))
-          } else if (mode === "on" && url && handle) {
-            flashNotice("rendezvous: publishing…")
-            void app
-              .setRendezvous(true, { baseUrl: url, handle })
-              .catch((err: Error) => flashNotice(`rendezvous: ${err.message}`, 8_000))
-          } else {
-            flashNotice("usage: /rendezvous on <url> <handle> | off")
-          }
-        } else if (cmd === "find") {
-          if (!arg) flashNotice("usage: /find <handle>")
-          else {
-            void app
-              .searchHandle(arg)
-              .then((found) =>
-                flashNotice(
-                  found
-                    ? `${found.handle} is here — ${found.connectable ? "reachable" : "not reachable"} · /ask ${found.handle}`
-                    : `nobody is registered as "${arg}"`,
-                  10_000,
-                ),
-              )
-              .catch((err: Error) => flashNotice(`find: ${err.message}`, 8_000))
-          }
-        } else if (cmd === "ask") {
-          if (!arg) flashNotice("usage: /ask <handle>")
-          else {
-            void app
-              .requestIntroduction(arg)
-              .then(() => flashNotice(`asked ${arg} for an introduction — waiting for them`, 10_000))
-              .catch((err: Error) => flashNotice(`ask: ${err.message}`, 8_000))
-          }
-        } else if (cmd === "accept" || cmd === "ignore") {
-          // Short ids are what the notice shows, so short ids are what this takes.
-          const pending = app.listIntroductionRequests()
-          const match = arg
-            ? pending.find((r) => r.requestId === arg || r.requestId.startsWith(arg))
-            : pending[0]
-          if (!match) {
-            flashNotice(pending.length === 0 ? "no introductions waiting" : `no introduction matching "${arg}"`)
-          } else {
-            const accept = cmd === "accept"
-            void app
-              .respondIntroduction(match.requestId, accept)
-              .then(() => {
-                setIntroductions(app.listIntroductionRequests())
-                flashNotice(
-                  accept
-                    ? `accepted ${match.fromHandle} — connecting directly`
-                    : `ignored ${match.fromHandle}`,
-                  8_000,
-                )
-              })
-              .catch((err: Error) => flashNotice(`${cmd}: ${err.message}`, 8_000))
-          }
-        } else if (cmd === "name") {
-          if (!arg) flashNotice(`you are "${identity?.name ?? "unnamed"}" — /name <new name>`, 8_000)
-          else {
-            void app
-              .setDisplayName(arg)
-              .then(() => flashNotice(`you are now "${arg}" — peers see this when they meet you`, 8_000))
-              .catch((err: Error) => flashNotice(`name: ${err.message}`, 8_000))
-          }
-        } else if (cmd === "invite") {
-          void app
-            .createInvite(arg || undefined)
-            .then((code) => flashNotice(`${code} — paste this to them`, 30_000))
-            .catch((err: Error) => flashNotice(`invite: ${err.message}`))
-        } else if (cmd === "net") {
-          if (!net) flashNotice("this build has no UDP transport wired")
-          else {
-            const connected = peers.filter((p) => p.status === "connected")
-            const routes = connected
-              .map((p) => `${p.displayName ?? p.name}=${net.routeOf(p.peerId) ?? "?"}`)
-              .join(" ")
-            flashNotice(
-              `udp :${net.udpPort} · public ${net.publicCandidate ? `${net.publicCandidate.host}:${net.publicCandidate.port}` : "unknown"}${routes ? ` · ${routes}` : " · no peers"}`,
-              15_000,
-            )
-          }
-        } else if (cmd === "stun") {
-          if (!net) flashNotice("this build has no UDP transport wired")
-          else {
-            flashNotice("measuring…")
-            void net
-              .measure()
-              .then((report) =>
-                flashNotice(
-                  `${report.address ? `${report.address.host}:${report.address.port}` : "no answer"} — ${report.detail}`,
-                  20_000,
-                ),
-              )
-              .catch((err: Error) => flashNotice(`stun: ${err.message}`, 8_000))
-          }
-        } else {
-          // Unknown commands used to fall off the end of this chain and do
-          // nothing at all — no error, no hint, just a swallowed line.
-          flashNotice(`unknown command "/${cmd}"`)
-        }
+            return Boolean(match)
+          },
+          toggleVoice,
+          toggleMute,
+        })
         return
       }
+
       // Room chat follows voice presence: while you're IN the room's voice
       // channel, plain text talks to the room (you're "in" it, Discord-like);
       // otherwise plain text keeps going to the selected peer. /say is always
@@ -592,7 +422,23 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
       }
       void send(value)
     },
-    [app, connectTo, cycleThemeById, flashNotice, identity, net, peers, selectedPeerId, selfInVoice, send],
+    [
+      activeRoom,
+      app,
+      connectTo,
+      cycleThemeById,
+      flashNotice,
+      invitations,
+      log,
+      net,
+      peers,
+      rooms,
+      selectedPeerId,
+      selfInVoice,
+      send,
+      toggleMute,
+      toggleVoice,
+    ],
   )
 
   const lastSentRef = useRef<string | undefined>(undefined)
@@ -739,7 +585,7 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
   const footerHint = notice ?? hint
   const footerKeys = home
     ? "enter continue · a add peer · s settings"
-    : "tab chat · c voice · m mute · s settings"
+    : "/help commands · tab chat · c voice · s settings"
 
   // Entrance choreography (dream vision §17): the shell settles in
   // left-to-right beats — people, chat. One-shot on mount; inert under the
@@ -838,12 +684,14 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
             />
           ) : null}
           {voiceStrip}
+          <CommandPanel draft={draft} log={commandLog} width={width} />
           <InputLine
             focused={focus === "input"}
             width={width}
             disabled={!selectedPeer}
             onSubmit={handleSubmitWithRecall}
             onRecallLast={handleRecall}
+            onDraft={setDraft}
             registerForwardChar={(fn) => {
               forwardCharRef.current = fn
             }}

@@ -1,12 +1,12 @@
 PackageIdentifier: MrEmoji27.Nex
-PackageVersion: 3.0.0-alpha.7
+PackageVersion: 3.0.0-alpha.8
 ManifestType: installer
 ManifestVersion: 1.6.0
 Installers:
 - Architecture: x64
   InstallerType: inno
-  InstallerUrl: https://github.com/MrEmoji27/nex/releases/download/v3.0.0-alpha.7/Nex-setup-3.0.0-alpha.7.exe
-  InstallerSha256: 86252B97E809A8C397052E35B0B41D8F81381433F7AB837D89E5BBE6BCD150B7
+  InstallerUrl: https://github.com/MrEmoji27/nex/releases/download/v3.0.0-alpha.8/Nex-setup-3.0.0-alpha.8.exe
+  InstallerSha256: F971188C699E337AB96B99E613445C3239AEBB25C8AFF0A428E36DEE3CCEDBB3
   Scope: user
   InstallerSwitches:
     Silent: /VERYSILENT /SUPPRESSMSGBOXES

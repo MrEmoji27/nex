@@ -16,6 +16,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.0-alpha.8] - 2026-08-27
+
+### Summary
+
+Commands were running the whole time — you just could not see what they said.
+Their answers went to a single line in the footer, cut short to fit and gone
+after four seconds, which from the outside is indistinguishable from nothing
+happening. This release gives commands somewhere to speak, and shows you what
+they are while you type them.
+
+### Added
+
+- **A preview above the input.** Type `/` and the commands appear, filtered as
+  you keep typing, each with what it takes and what it does.
+- **Command output stays on screen.** Results appear above the input line and
+  remain there until newer ones push them off, instead of flashing past in the
+  footer.
+- **`/help`** lists everything, grouped. `/help <command>` explains one.
+- **A mistyped command suggests the real one.** `/fnd` now answers "did you mean
+  /find?" instead of only refusing.
+
+### Fixed
+
+- **Every command says something.** Several used to succeed or fail in total
+  silence — `/peers` in particular did nothing visible at all. Failures now
+  explain themselves, including which command you probably wanted: `/rename`
+  renames a contact, `/name` renames you, and mixing them up now says so.
+
+---
+
 ## [3.0.0-alpha.7] - 2026-08-27
 
 ### Summary

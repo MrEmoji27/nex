@@ -9,10 +9,12 @@ export function InputLine(props: {
   disabled: boolean
   onSubmit(value: string): void
   onRecallLast(): string | undefined
+  /** Fires as the text changes, so the panel above can preview a command. */
+  onDraft?(value: string): void
   /** Receives the handler that pane-focused typing forwards characters to. */
   registerForwardChar?(forward: (ch: string) => void): void
 }) {
-  const { focused, width, disabled, onSubmit, onRecallLast, registerForwardChar } = props
+  const { focused, width, disabled, onSubmit, onRecallLast, onDraft, registerForwardChar } = props
   const inputRef = useRef<InputRenderable | null>(null)
   const lastSent = useRef<string | undefined>(undefined)
 
@@ -28,6 +30,20 @@ export function InputLine(props: {
       el.focus()
     })
   }, [registerForwardChar])
+
+  // The renderable emits "input" on every keystroke. There is no React prop for
+  // it, so this attaches to the element and mirrors the value upward — the
+  // command preview cannot exist without knowing what is being typed.
+  useEffect(() => {
+    const el = inputRef.current as unknown as {
+      on?(event: string, cb: (value: string) => void): void
+      off?(event: string, cb: (value: string) => void): void
+    } | null
+    if (!el?.on || !onDraft) return
+    const handler = (value: string) => onDraft(typeof value === "string" ? value : inputRef.current?.value ?? "")
+    el.on("input", handler)
+    return () => el.off?.("input", handler)
+  }, [onDraft])
 
   // Up-arrow recalls the last sent message while the input holds focus.
   useEffect(() => {
@@ -83,11 +99,13 @@ return (
           if (disabled && !trimmed.startsWith("/")) {
             onSubmit(trimmed)
             if (inputRef.current) inputRef.current.value = ""
+            onDraft?.("")
             return
           }
           lastSent.current = trimmed
           onSubmit(trimmed)
           if (inputRef.current) inputRef.current.value = ""
+          onDraft?.("")
         }}
       />
     </box>
