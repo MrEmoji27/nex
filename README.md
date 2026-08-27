@@ -39,7 +39,26 @@ That is the whole idea, and everything else follows from it:
 stated plainly here rather than buried, because a feature table that implies
 otherwise is worse than no table.
 
-## Getting started
+## Install
+
+**Windows** — one line, no toolchain:
+
+```powershell
+irm https://raw.githubusercontent.com/MrEmoji27/nex/main/packaging/install.ps1 | iex
+```
+
+It downloads [`v3.0.0-alpha.3`](https://github.com/MrEmoji27/nex/releases/tag/v3.0.0-alpha.3),
+checks its SHA256 before running it, and installs a global `nex` command.
+
+Every release so far is marked **pre-release**, and that is not a formality:
+this is an untested alpha and it will have bugs. GitHub only shows a "latest
+release" card for a release that is *not* marked pre-release, so this repository
+shows a tag count instead. Linking it here was the alternative to relabelling
+something to look more finished than it is.
+
+macOS and Linux builds are not published yet — build from source below.
+
+## Building from source
 
 Requires [Bun](https://bun.sh).
 
@@ -58,7 +77,7 @@ Then in either one, `/invite` prints a `nex://` code. Paste it into the other
 and you are talking. The code carries a fingerprint, so the first connection is
 checked rather than trusted.
 
-Windows users can install a packaged build instead — see `packaging/`.
+Packaging details, hashes and the release process live in `packaging/`.
 
 ## Finding people who are not on your network
 
