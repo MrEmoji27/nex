@@ -1,67 +1,46 @@
-// Changelog modal — in-app viewer for doc/CHANGELOG.md.
-// Parses the markdown at build/load time and renders a scrollable modal.
-import { useEffect, useState } from "react"
+// Changelog modal — in-app viewer for the published CHANGELOG.md.
+//
+// The markdown is imported, not fetched. It used to be read at runtime from
+// `doc/CHANGELOG.md` through `new URL(..., import.meta.url)`, which was wrong
+// twice over: `doc/` is not shipped by the installer, so an installed build
+// showed "changelog unavailable" and nothing else — and `doc/CHANGELOG.md` was
+// a stale development copy while the root CHANGELOG.md is the one that is
+// published and kept in step with the website.
+//
+// A build-time import ends both problems at once. Bun embeds the text in the
+// compiled binary, so there is no file to locate at runtime, no failure mode
+// that depends on where the app was installed, and no second copy to drift.
+import changelogMarkdown from "../../CHANGELOG.md" with { type: "text" }
 import { useKeyboard } from "@opentui/react"
+import { parseChangelog, wrap, type ChangelogEntry } from "./changelog-parse"
 import { colors } from "./theme"
 import { ModalPanel } from "./modal-panel"
 
-interface ChangelogEntry {
-  version: string
-  date?: string
-  items: string[]
-}
-
-function parseChangelog(md: string): ChangelogEntry[] {
-  const entries: ChangelogEntry[] = []
-  let current: ChangelogEntry | null = null
-
-  for (const line of md.split("\n")) {
-    const headerMatch = line.match(/^##\s+\[(.+?)\]\s*[—-]\s*(.*)$/)
-    if (headerMatch) {
-      if (current) entries.push(current)
-      const version = headerMatch[1]!.trim()
-      const date = headerMatch[2]?.trim() || undefined
-      current = {
-        version,
-        date,
-        items: [],
-      }
-      continue
-    }
-    if (current && line.startsWith("- ")) {
-      current.items.push(line.slice(2).trim())
-    }
-  }
-  if (current) entries.push(current)
-  return entries
-}
-
-async function loadChangelog(): Promise<ChangelogEntry[]> {
-  try {
-    const res = await fetch(
-      new URL("../../doc/CHANGELOG.md", import.meta.url).toString(),
-    )
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const md = await res.text()
-    return parseChangelog(md)
-  } catch {
-    return []
-  }
-}
+const ENTRIES: ChangelogEntry[] = parseChangelog(changelogMarkdown)
 
 function renderEntry(entry: ChangelogEntry, width: number) {
+  const textWidth = width - 8
   return (
     <box key={entry.version} style={{ flexDirection: "column" }}>
       <box style={{ flexDirection: "row", height: 1 }}>
         <text fg={colors.accent}>{`▼ ${entry.version}`}</text>
-        {entry.date !== undefined && entry.date !== null ? (
-          <text fg={colors.textMuted}>{` — ${entry.date}`}</text>
-        ) : null}
+        {entry.date ? <text fg={colors.textMuted}>{` — ${entry.date}`}</text> : null}
       </box>
-      {entry.items.map((item, i) => (
-        <box key={i} style={{ flexDirection: "row", height: 1, paddingLeft: 2 }}>
-          <text fg={colors.textMuted}>{"· "}</text>
-          <text fg={colors.text}>{item.slice(0, width - 6)}</text>
+      {entry.sections.map((section, s) => (
+        <box key={s} style={{ flexDirection: "column" }}>
+          {section.label ? (
+            <box style={{ flexDirection: "row", height: 1, paddingLeft: 2 }}>
+              <text fg={colors.textMuted}>{section.label}</text>
+            </box>
+          ) : null}
+          {section.items.map((item, i) =>
+            wrap(item, textWidth).map((line, l) => (
+              <box key={`${i}-${l}`} style={{ flexDirection: "row", height: 1, paddingLeft: 4 }}>
+                <text fg={colors.textMuted}>{l === 0 ? "· " : "  "}</text>
+                <text fg={colors.text}>{line}</text>
+              </box>
+            )),
+          )}
         </box>
       ))}
       <box style={{ height: 1 }} />
@@ -75,51 +54,22 @@ export function ChangelogModal(props: {
   onClose(): void
 }) {
   const { termWidth, termHeight, onClose } = props
-  const [entries, setEntries] = useState<ChangelogEntry[]>([])
-  const [loading, setLoading] = useState(true)
   const width = Math.min(76, Math.max(40, termWidth - 8))
   const height = Math.max(12, termHeight - 6)
-
-  useEffect(() => {
-    let mounted = true
-    loadChangelog()
-      .then((entries) => {
-        if (mounted) {
-          setEntries(entries)
-          setLoading(false)
-        }
-      })
-      .catch(() => {
-        if (mounted) setLoading(false)
-      })
-    return () => {
-      mounted = false
-    }
-  }, [])
 
   useKeyboard((key) => {
     if (key.name === "escape") onClose()
   })
 
-  if (loading) {
-    return (
-      <ModalPanel title="Changelog" termWidth={termWidth} termHeight={termHeight} width={width} height={height}>
-        <box style={{ flexDirection: "column", paddingTop: 2 }}>
-          <text fg={colors.accent}>loading changelog…</text>
-        </box>
-      </ModalPanel>
-    )
-  }
-
   return (
     <ModalPanel title="Changelog" termWidth={termWidth} termHeight={termHeight} width={width} height={height}>
       <scrollbox style={{ height: height - 4, width: "100%" }} scrollY>
-        {entries.length === 0 ? (
+        {ENTRIES.length === 0 ? (
           <box style={{ flexDirection: "column", paddingTop: 2 }}>
             <text fg={colors.textMuted}>changelog unavailable</text>
           </box>
         ) : (
-          entries.map((entry) => renderEntry(entry, width))
+          ENTRIES.map((entry) => renderEntry(entry, width))
         )}
       </scrollbox>
     </ModalPanel>
