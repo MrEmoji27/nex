@@ -16,6 +16,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.0-alpha.9] - 2026-08-27
+
+### Summary
+
+The command preview added in alpha.8 pushed the input line off the bottom of the
+screen. Typing `/` hid the field you were typing into, which is why the app felt
+like it was not reading input.
+
+### Fixed
+
+- **The input line stays visible while you type a command.** The preview is now
+  drawn inside a height budget taken out of the panes above it, instead of
+  growing until something fell off the screen.
+- **A partly typed command suggests the whole one.** `/na` now answers "did you
+  mean /name?" — before, only single-character typos were recognised, so an
+  unfinished word was reported as unrelated.
+- **The "and N more" line counts correctly.** It was under by one, because the
+  row it replaced was not counted.
+
+### Added
+
+- **`/rendezvous on <handle>` no longer needs the address.** It uses the service
+  this node used last, or the public one, so the only thing you have to type is
+  the part only you know — your handle. Giving a URL still works, in either
+  order, and still wins.
+
+---
+
 ## [3.0.0-alpha.8] - 2026-08-27
 
 ### Summary

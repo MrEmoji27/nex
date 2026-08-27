@@ -21,7 +21,7 @@ import { VerifyModal } from "./verify-modal"
 import { HomeScreen } from "./home-screen"
 import { SettingsModal, RETENTION_ORDER, nextIn } from "./settings-modal"
 import { ChangelogModal } from "./changelog-modal"
-import { CommandPanel, type LogLine } from "./command-panel"
+import { CommandPanel, panelLines, type LogLine } from "./command-panel"
 import { runCommand } from "./run-command"
 import { VoiceStrip } from "./voice-strip"
 import { MotionScope, animsEnabled } from "./use-tick"
@@ -383,6 +383,9 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
           rooms,
           invitations,
           activeRoom: activeRoom ?? null,
+          // Whatever this node used last wins over the built-in default, so
+          // someone running their own service types the URL once.
+          rendezvousUrl: settings.rendezvous?.baseUrl,
           log,
           openModal: (kind) => {
             if (kind === "verify" && selectedPeerId) setModal({ kind: "verify", peerId: selectedPeerId })
@@ -425,6 +428,7 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
     [
       activeRoom,
       app,
+      settings.rendezvous?.baseUrl,
       connectTo,
       cycleThemeById,
       flashNotice,
@@ -570,7 +574,12 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
   }
 
   // Layout budget: 1 header + 3 input + 1 footer; context strip when shown.
-  const paneHeight = Math.max(4, height - (showContextStrip ? 6 : 5))
+  // The panel above the input is drawn from this, and its height comes OUT of
+  // the panes. Letting it size itself pushed the input line off the bottom of
+  // the terminal, so typing "/" hid the field being typed into.
+  const panelBudget = Math.max(0, Math.min(7, height - 14))
+  const panel = panelLines(draft, commandLog, width, panelBudget)
+  const paneHeight = Math.max(4, height - (showContextStrip ? 6 : 5) - panel.length)
 
   const home = screen === "home"
   const hint = lastError
@@ -684,7 +693,7 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
             />
           ) : null}
           {voiceStrip}
-          <CommandPanel draft={draft} log={commandLog} width={width} />
+          <CommandPanel lines={panel} width={width} />
           <InputLine
             focused={focus === "input"}
             width={width}

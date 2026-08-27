@@ -11,7 +11,7 @@
     - Cleans up temp file
     - Fails fast if not Windows or PowerShell too old
 
-    WARNING: This installs an untested alpha release (v3.0.0-alpha.8).
+    WARNING: This installs an untested alpha release (v3.0.0-alpha.9).
 #>
 
 # Fail if not Windows
@@ -36,9 +36,9 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
 #
 # These three move together. Cutting a release means updating all three here.
 $repo = "MrEmoji27/nex"
-$version = "v3.0.0-alpha.8"
-$assetName = "Nex-setup-3.0.0-alpha.8.exe"
-$expectedSha256 = "f971188c699e337ab96b99e613445c3239aebb25c8aff0a428e36dee3ccedbb3"
+$version = "v3.0.0-alpha.9"
+$assetName = "Nex-setup-3.0.0-alpha.9.exe"
+$expectedSha256 = "83d3b57dd10a1b02209116c01839aa9fc5c23b28a354f289ec5744f78e2fb6d6"
 
 Write-Host "Resolving $version from GitHub..." -ForegroundColor Cyan
 

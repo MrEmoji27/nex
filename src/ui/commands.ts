@@ -9,6 +9,15 @@
 // Ordered by what a new node needs first — finding someone, then talking to
 // them — because that order is also the order the palette shows them in.
 
+/**
+ * The service `/rendezvous on <handle>` uses when no URL is given.
+ *
+ * Rendezvous is optional and the protocol is not tied to any host, so this is a
+ * convenience and not a dependency: point it anywhere with the two-argument
+ * form, and whatever was used last is preferred over this default.
+ */
+export const DEFAULT_RENDEZVOUS_URL = "https://nex-rendezvous.onrender.com"
+
 export interface CommandSpec {
   name: string
   /** Arguments, as a person would type them. Empty when it takes none. */
@@ -23,7 +32,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   // ---- finding people ----
   {
     name: "rendezvous",
-    args: "on <url> <handle> | off",
+    args: "on <handle> [url] | off",
     summary: "publish your name so people can find you across the internet",
     group: "finding people",
   },
@@ -90,6 +99,10 @@ export function usage(spec: CommandSpec): string {
 export function suggest(name: string): CommandSpec | undefined {
   const needle = name.toLowerCase()
   if (!needle) return undefined
+  // A prefix is not a typo, it is an unfinished word, and edit distance scores
+  // it badly: "na" is two edits from "name" and would be rejected as unrelated.
+  const prefix = COMMANDS.find((c) => c.name.startsWith(needle))
+  if (prefix) return prefix
   let best: CommandSpec | undefined
   let bestScore = Infinity
   for (const spec of COMMANDS) {

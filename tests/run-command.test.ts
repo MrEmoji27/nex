@@ -10,7 +10,7 @@
 // SAID. A command that runs silently has failed even when it worked.
 import { describe, expect, test } from "bun:test"
 import type { NexApp } from "../src/core/contract"
-import { COMMANDS, usage } from "../src/ui/commands"
+import { COMMANDS, DEFAULT_RENDEZVOUS_URL, usage } from "../src/ui/commands"
 import { runCommand, type CommandContext } from "../src/ui/run-command"
 
 function harness(overrides: Partial<CommandContext> = {}, appOverrides: Partial<NexApp> = {}) {
@@ -160,10 +160,53 @@ describe("finding people", () => {
     expect(h.said()).toContain("rendezvous is off")
   })
 
-  test("/rendezvous on needs both parts", async () => {
+  test("/rendezvous on needs a handle", async () => {
     const h = harness()
-    await runCommand("/rendezvous on https://example.com", h.ctx)
+    await runCommand("/rendezvous on", h.ctx)
     expect(h.said()).toContain("usage:")
+  })
+
+  test("a handle alone uses the default service", async () => {
+    // Making someone retype a service address they have already used is how a
+    // working command gets abandoned.
+    const calls: Array<{ baseUrl?: string; handle?: string }> = []
+    const h = harness({}, {
+      setRendezvous: async (_on: boolean, cfg?: { baseUrl?: string; handle?: string }) => {
+        calls.push(cfg ?? {})
+      },
+    } as unknown as Partial<NexApp>)
+    await runCommand("/rendezvous on zemo", h.ctx)
+    expect(calls[0]!.handle).toBe("zemo")
+    expect(calls[0]!.baseUrl).toBe(DEFAULT_RENDEZVOUS_URL)
+  })
+
+  test("a service this node already used beats the default", async () => {
+    const calls: Array<{ baseUrl?: string }> = []
+    const h = harness(
+      { rendezvousUrl: "https://mine.example" },
+      {
+        setRendezvous: async (_on: boolean, cfg?: { baseUrl?: string }) => {
+          calls.push(cfg ?? {})
+        },
+      } as unknown as Partial<NexApp>,
+    )
+    await runCommand("/rendezvous on zemo", h.ctx)
+    expect(calls[0]!.baseUrl).toBe("https://mine.example")
+  })
+
+  test("an explicit URL beats both, in either order", async () => {
+    const calls: Array<{ baseUrl?: string; handle?: string }> = []
+    const app = {
+      setRendezvous: async (_on: boolean, cfg?: { baseUrl?: string; handle?: string }) => {
+        calls.push(cfg ?? {})
+      },
+    } as unknown as Partial<NexApp>
+    const first = harness({ rendezvousUrl: "https://mine.example" }, app)
+    await runCommand("/rendezvous on zemo https://other.example", first.ctx)
+    const second = harness({ rendezvousUrl: "https://mine.example" }, app)
+    await runCommand("/rendezvous on https://other.example zemo", second.ctx)
+    expect(calls.map((c) => c.baseUrl)).toEqual(["https://other.example", "https://other.example"])
+    expect(calls.map((c) => c.handle)).toEqual(["zemo", "zemo"])
   })
 })
 

@@ -17,7 +17,7 @@
 
 import type { NexApp, PeerInfo, RetentionPolicy, RoomInvitation, RoomView } from "../core/contract.ts"
 import type { NetDiagnostics } from "../main/node-app"
-import { COMMANDS, findCommand, suggest, usage } from "./commands"
+import { COMMANDS, DEFAULT_RENDEZVOUS_URL, findCommand, suggest, usage } from "./commands"
 
 export interface CommandContext {
   app: NexApp
@@ -28,6 +28,8 @@ export interface CommandContext {
   rooms: readonly RoomView[]
   invitations: readonly RoomInvitation[]
   activeRoom: RoomView | null
+  /** Service to use when /rendezvous is given a handle but no URL. */
+  rendezvousUrl?: string
   /** Output. Everything the user learns from a command comes through here. */
   log(text: string, tone?: "ok" | "bad"): void
   openModal(kind: "verify" | "settings" | "add-peer"): void
@@ -87,7 +89,13 @@ async function dispatch(cmd: string, arg: string, ctx: CommandContext): Promise<
 
     // ---------- finding people ----------
     case "rendezvous": {
-      const [mode = "", url = "", handle = ""] = arg.split(/\s+/)
+      const [mode = "", ...restArgs] = arg.split(/\s+/).filter(Boolean)
+      // Either order, and the URL is optional: a handle is the part only the
+      // user knows, and making them retype a service address they have already
+      // used once is how a working command gets abandoned.
+      const givenUrl = restArgs.find((t) => /^https?:\/\//i.test(t))
+      const handle = restArgs.find((t) => t !== givenUrl) ?? ""
+      const url = givenUrl ?? ctx.rendezvousUrl ?? DEFAULT_RENDEZVOUS_URL
       if (!mode) {
         const state = app.getRendezvousState()
         log(
@@ -102,11 +110,11 @@ async function dispatch(cmd: string, arg: string, ctx: CommandContext): Promise<
         log("rendezvous off")
         return
       }
-      if (mode !== "on" || !url || !handle) {
-        log("usage: /rendezvous on <url> <handle> | off", "bad")
+      if (mode !== "on" || !handle) {
+        log("usage: /rendezvous on <handle> [url]  ·  /rendezvous off", "bad")
         return
       }
-      log(`publishing as "${handle}"…`)
+      log(`publishing as "${handle}" on ${url}…`)
       await app.setRendezvous(true, { baseUrl: url, handle })
       const state = app.getRendezvousState()
       log(state.connectable ? `published as "${handle}" — people can /find you` : `rendezvous enabled; waiting to publish`)
