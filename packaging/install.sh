@@ -11,7 +11,7 @@
 # - Cleans up temp files
 # - Fails fast if not macOS/Linux or required tools missing
 #
-# WARNING: This installs an untested alpha release (v3.0.0-alpha.5).
+# WARNING: This installs an untested alpha release (v3.0.0-alpha.6).
 
 set -eu
 
@@ -36,7 +36,7 @@ done
 # The tag is pinned deliberately. These three move together when cutting a release:
 #   VERSION, asset filename pattern, and expected SHA256.
 REPO="MrEmoji27/nex"
-VERSION="v3.0.0-alpha.5"
+VERSION="v3.0.0-alpha.6"
 
 # Asset table: pattern, expected SHA256.
 # When real macOS/Linux assets are published, add them here.

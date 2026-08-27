@@ -16,6 +16,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.0-alpha.6] - 2026-08-27
+
+### Summary
+
+You can change your own name from inside the app now. Small, but until this
+release the only way to do it was to quit and relaunch with a command-line flag,
+which is not something anyone would guess.
+
+### Added
+
+- **`/name <you>`** sets the name peers see when they meet you, and it sticks —
+  no relaunch. `/name` on its own says what you are currently called. Your
+  identity does not change: the long fingerprint that proves who you are stays
+  exactly the same, so nobody who already trusts you has to do anything.
+
+### Note
+
+`/rename` is a different command and always was: it renames a *contact*, in your
+copy only. `/name` is you.
+
+---
+
 ## [3.0.0-alpha.5] - 2026-08-27
 
 ### Summary
