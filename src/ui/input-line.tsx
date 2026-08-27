@@ -66,14 +66,25 @@ return (
       <input
         ref={inputRef}
         focused={focused}
-        placeholder={disabled ? "(no conversation selected — press a to add someone)" : "type a message"}
+        placeholder={
+          disabled ? "no one selected — / commands still work (try /find)" : "type a message"
+        }
         textColor={colors.fg}
         backgroundColor={undefined}
         style={{ flexGrow: 1 }}
         onSubmit={(value: unknown) => {
           const text = typeof value === "string" ? value : inputRef.current?.value ?? ""
           const trimmed = text.trim()
-          if (!trimmed || disabled) return
+          // A command is not a message and must never need a conversation.
+          // Blocking on `disabled` made the app a dead end on first run: with
+          // no contacts yet, /rendezvous — the command that GETS you a contact
+          // — was swallowed along with everything else, silently.
+          if (!trimmed) return
+          if (disabled && !trimmed.startsWith("/")) {
+            onSubmit(trimmed)
+            if (inputRef.current) inputRef.current.value = ""
+            return
+          }
           lastSent.current = trimmed
           onSubmit(trimmed)
           if (inputRef.current) inputRef.current.value = ""

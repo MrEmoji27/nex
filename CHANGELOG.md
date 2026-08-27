@@ -16,6 +16,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.0-alpha.7] - 2026-08-27
+
+### Summary
+
+Two bugs that made the app look broken on a fresh install. If you typed a
+command and nothing happened, this is why.
+
+### Fixed
+
+- **Commands work before you have any contacts.** The input line refused
+  everything while no conversation was selected — which, on a fresh install, is
+  always. That included the commands for finding people, so the only way out of
+  an empty app was blocked by the app being empty. Commands now always go
+  through; only ordinary messages need someone to send them to.
+- **Pressing enter with nobody selected says so** instead of doing nothing at
+  all. Silence is indistinguishable from a broken key.
+- **The app reported the wrong version of itself.** It had been saying
+  3.0.0-alpha.2 since that release, because the version it displays comes from a
+  file nothing was updating. The build now refuses to produce an installer when
+  the version in the package, the installer and the changelog disagree.
+
+---
+
 ## [3.0.0-alpha.6] - 2026-08-27
 
 ### Summary

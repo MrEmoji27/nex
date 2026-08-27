@@ -584,6 +584,12 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
           .catch((err: Error) => flashNotice(`room: ${err.message}`))
         return
       }
+      if (!selectedPeerId) {
+        // Previously this returned quietly, which looked exactly like a broken
+        // Enter key. Same lesson as unknown commands: say something.
+        flashNotice("no one selected — /find someone, or press a to add them")
+        return
+      }
       void send(value)
     },
     [app, connectTo, cycleThemeById, flashNotice, identity, net, peers, selectedPeerId, selfInVoice, send],

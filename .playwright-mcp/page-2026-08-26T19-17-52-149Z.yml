@@ -1,0 +1,70 @@
+- generic [active] [ref=f16e1]:
+  - link "Skip to content" [ref=f16e2] [cursor=pointer]:
+    - /url: "#main"
+  - banner [ref=f16e3]:
+    - link "Nex Rendezvous — home Rendezvous" [ref=f16e4] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f16e5]: Nex Rendezvous — home
+      - generic [ref=f16e6]: Rendezvous
+  - main [ref=f16e13]:
+    - region "The Nex network" [ref=f16e14]:
+      - generic [ref=f16e17]:
+        - heading "Nex Rendezvous" [level=1] [ref=f16e18]:
+          - generic [ref=f16e20]: ███╗ ██╗███████╗██╗ ██╗ ████╗ ██║██╔════╝╚██╗██╔╝ ██╔██╗ ██║█████╗ ╚███╔╝ ██║╚██╗██║██╔══╝ ██╔██╗ ██║ ╚████║███████╗██╔╝ ██╗ ╚═╝ ╚═══╝╚══════╝╚═╝ ╚═╝
+        - region "people connected" [ref=f16e22]:
+          - paragraph [ref=f16e23]:
+            - generic [ref=f16e24]: ▮
+            - generic [ref=f16e25]: "---"
+            - generic [ref=f16e26]: people connected
+          - paragraph [ref=f16e27]:
+            - text: checking…
+            - button "retry" [disabled] [ref=f16e28]
+          - status [ref=f16e29]: no count is available — the service cannot be reached
+  - contentinfo [ref=f16e30]:
+    - generic [ref=f16e31]:
+      - generic [ref=f16e32]:
+        - generic [ref=f16e33]:
+          - link "Nex Rendezvous — home Rendezvous" [ref=f16e34] [cursor=pointer]:
+            - /url: /
+            - generic [ref=f16e35]: Nex Rendezvous — home
+            - generic [ref=f16e36]: Rendezvous
+          - paragraph [ref=f16e43]: An optional way for Nex users to find each other. It makes the introduction, then steps aside. Your messages never pass through it, it keeps no list of everyone using Nex, and Nex runs fine without it.
+          - paragraph [ref=f16e44]: The Rendezvous Service helps the lights find each other. Nex is what happens when they connect.
+        - navigation "Footer" [ref=f16e45]:
+          - generic [ref=f16e46]:
+            - generic [ref=f16e47]:
+              - heading "The service" [level=2] [ref=f16e48]
+              - list [ref=f16e49]:
+                - listitem [ref=f16e50]:
+                  - link "Overview" [ref=f16e51] [cursor=pointer]:
+                    - /url: /
+                - listitem [ref=f16e52]:
+                  - link "Network" [ref=f16e53] [cursor=pointer]:
+                    - /url: /network/
+                - listitem [ref=f16e54]:
+                  - link "Security" [ref=f16e55] [cursor=pointer]:
+                    - /url: /security/
+            - generic [ref=f16e56]:
+              - heading "Reference" [level=2] [ref=f16e57]
+              - list [ref=f16e58]:
+                - listitem [ref=f16e59]:
+                  - link "Status" [ref=f16e60] [cursor=pointer]:
+                    - /url: /status/
+                - listitem [ref=f16e61]:
+                  - link "Docs" [ref=f16e62] [cursor=pointer]:
+                    - /url: /docs/
+                - listitem [ref=f16e63]:
+                  - link "Changelog" [ref=f16e64] [cursor=pointer]:
+                    - /url: /changelog/
+      - generic [ref=f16e68]:
+        - paragraph [ref=f16e69]: No accounts · No tracking · No database
+        - paragraph [ref=f16e70]: Wire contract v1 · frozen
+      - paragraph [ref=f16e71]:
+        - text: — made by
+        - link "zemo" [ref=f16e72] [cursor=pointer]:
+          - /url: https://portfolio.mremoji47.workers.dev/
+          - generic [ref=f16e73]:
+            - text: zemo
+            - generic [ref=f16e74]: zemo
+        - text: —
+  - alert [ref=f16e75]

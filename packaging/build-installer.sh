@@ -4,6 +4,20 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# The version lives in three places and they must agree: package.json is what
+# the app reports about itself, nex.iss names the installer, and CHANGELOG.md is
+# what ships inside the binary. package.json sat at 3.0.0-alpha.2 through four
+# releases because nothing checked, so the app told every user it was alpha.2.
+echo "==> 0/5 version agreement"
+pkg=$(grep -m1 '"version"' package.json | sed 's/.*: *"//; s/".*//')
+iss=$(grep -m1 'MyAppVersion' packaging/nex.iss | sed 's/[^"]*"//; s/".*//')
+log=$(grep -m1 '^## \[' CHANGELOG.md | sed 's/^## \[//; s/\].*//')
+if [ "$pkg" != "$iss" ] || [ "$pkg" != "$log" ]; then
+  echo "version mismatch — package.json=$pkg nex.iss=$iss CHANGELOG=$log" >&2
+  exit 1
+fi
+echo "    $pkg"
+
 echo "==> 1/5 typecheck"
 bun run typecheck
 

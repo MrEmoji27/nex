@@ -1,5 +1,5 @@
 PackageIdentifier: MrEmoji27.Nex
-PackageVersion: 3.0.0-alpha.6
+PackageVersion: 3.0.0-alpha.7
 ManifestType: locale
 ManifestVersion: 1.6.0
 PackageName: Nex
@@ -16,4 +16,4 @@ Tags:
 - decentralized
 PackageUrl: https://github.com/MrEmoji27/nex
 ProjectUrl: https://github.com/MrEmoji27/nex
-ReleaseNotesUrl: https://github.com/MrEmoji27/nex/releases/tag/v3.0.0-alpha.6
+ReleaseNotesUrl: https://github.com/MrEmoji27/nex/releases/tag/v3.0.0-alpha.7
