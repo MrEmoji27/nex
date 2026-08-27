@@ -11,6 +11,7 @@ import type {
 } from "../core/contract.ts"
 import type { NetDiagnostics } from "../main/node-app"
 import { Header } from "./header"
+import { StatusLine } from "./status-line"
 import { PeoplePane } from "./people-pane"
 import { ChatPane } from "./chat-pane"
 import { ContextStrip } from "./context-strip"
@@ -92,6 +93,8 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
   const [discovered, setDiscovered] = useState(() => app.listDiscovered())
   /** Introductions waiting on a human. Someone has to be able to /accept them. */
   const [introductions, setIntroductions] = useState<IntroductionRequestView[]>([])
+  /** Publication state, held rather than flashed — the status line reads it. */
+  const [rendezvous, setRendezvousState] = useState(() => app.getRendezvousState())
   useEffect(() => {
     setRooms(app.listRooms())
     setInvitations(app.listInvitations())
@@ -130,6 +133,7 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
       } else if (event.type === "introductionAnswered") {
         setIntroductions(app.listIntroductionRequests())
       } else if (event.type === "rendezvousChanged") {
+        setRendezvousState(event.state)
         const { connected, connectable, handle } = event.state
         if (connectable && handle) flashNotice(`rendezvous: published as "${handle}"`)
         else if (connected) flashNotice("rendezvous: connected, nothing published yet")
@@ -579,7 +583,12 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
   // the terminal, so typing "/" hid the field being typed into.
   const panelBudget = Math.max(0, Math.min(7, height - 14))
   const panel = panelLines(draft, commandLog, width, panelBudget)
-  const paneHeight = Math.max(4, height - (showContextStrip ? 6 : 5) - panel.length)
+  // Rows this does NOT get: header, status line, the rule, the context strip
+  // when shown, three for the input box, one for the footer, plus the command
+  // panel. Adding the status line without adding it here pushed the input box's
+  // bottom border off the screen — the same overflow the panel caused, made
+  // twice in one day, which is why tests/render-layout.test.tsx now asserts it.
+  const paneHeight = Math.max(4, height - (showContextStrip ? 7 : 6) - panel.length)
 
   const home = screen === "home"
   const hint = lastError
@@ -643,6 +652,17 @@ export function NexTui(props: { app: NexApp; net?: NetDiagnostics }) {
           covered surfaces stop repainting instead of ticking unseen). */}
       <MotionScope suspended={modal !== null}>
         <Header identity={identity} status={status} width={width} />
+      <StatusLine
+        width={width}
+        name={identity.name}
+        publishedAs={rendezvous.connectable ? rendezvous.handle : null}
+        peers={peers}
+        routeOf={net ? (id) => net.routeOf(id) : undefined}
+        room={activeRoom ?? null}
+        voiceParticipants={activeRoom?.voice.participants.map((p) => p.peerId) ?? []}
+        selfId={selfId}
+        micMuted={activeRoom?.voice.selfMuted ?? false}
+      />
         <box style={{ flexDirection: "row", height: 1, backgroundColor: colors.border }}>
           <text fg={colors.border}>{"─".repeat(width)}</text>
         </box>
