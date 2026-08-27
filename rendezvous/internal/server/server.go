@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -23,6 +24,7 @@ import (
 	"nex.rendezvous/internal/control"
 	"nex.rendezvous/internal/protocol"
 	"nex.rendezvous/internal/ratelimit"
+	"nex.rendezvous/internal/stun"
 	"nex.rendezvous/internal/store"
 	"nex.rendezvous/internal/wire"
 )
@@ -39,6 +41,8 @@ type Server struct {
 	startedAt time.Time
 
 	stopSweeper chan struct{}
+
+	stunServer *stun.Server
 }
 
 // New builds a server. The clock is injected so every expiry rule in the
@@ -126,6 +130,10 @@ func (s *Server) Shutdown() {
 		close(s.stopSweeper)
 	}
 	s.hub.CloseAll()
+	if s.stunServer != nil {
+		s.stunServer.Close()
+		s.stunServer = nil
+	}
 }
 
 // Handler returns the http.Handler for the service.
@@ -366,6 +374,22 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		IdleTimeout:    120 * time.Second,
 		MaxHeaderBytes: 16 << 10,
 	}
+
+	// Start STUN server if configured
+	if s.cfg.STUNAddr != "" {
+		stunSrv, err := stun.NewServer(s.cfg.STUNAddr)
+		if err != nil {
+			// Log but don't fail - STUN is optional
+			log.Printf("STUN server failed to start on %s: %v", s.cfg.STUNAddr, err)
+		} else {
+			s.stunServer = stunSrv
+			go func() {
+				_ = stunSrv.Serve(ctx)
+			}()
+			log.Printf("STUN server listening on %s", s.cfg.STUNAddr)
+		}
+	}
+
 	s.StartSweeper()
 	defer s.Shutdown()
 
@@ -382,6 +406,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		if s.stunServer != nil {
+			s.stunServer.Close()
+		}
 		return srv.Shutdown(shutdownCtx)
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {

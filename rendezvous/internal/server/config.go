@@ -12,8 +12,12 @@ const Version = "1.0.0"
 // Config is the service's runtime configuration. Every field has a safe default
 // so the zero-configuration case is also the correct one.
 type Config struct {
-	// Addr is the listen address, e.g. ":8080".
+	// Addr is the listen address for HTTP, e.g. ":8080".
 	Addr string
+
+	// STUNAddr is the listen address for the STUN binding responder, e.g. ":3478".
+	// Empty string disables the STUN server.
+	STUNAddr string
 
 	// TLSCertFile and TLSKeyFile enable HTTPS directly. Left empty, the service
 	// serves plain HTTP and expects TLS to be terminated in front of it.
@@ -47,6 +51,7 @@ type Config struct {
 // Contract-derived defaults.
 const (
 	DefaultAddr           = ":8080"
+	DefaultSTUNAddr       = ":3478"
 	DefaultLeaseTTLMs     = 90000
 	DefaultRefreshAfterMs = 30000
 	DefaultSweepInterval  = 5 * time.Second
@@ -56,11 +61,12 @@ const (
 // set.
 func DefaultConfig() Config {
 	return Config{
-		Addr:                    DefaultAddr,
-		LeaseTTLMs:              DefaultLeaseTTLMs,
-		RefreshAfterMs:          DefaultRefreshAfterMs,
-		SweepInterval:           DefaultSweepInterval,
-		MaxLeases:               0, // store default
+		Addr:             DefaultAddr,
+		STUNAddr:         DefaultSTUNAddr,
+		LeaseTTLMs:       DefaultLeaseTTLMs,
+		RefreshAfterMs:   DefaultRefreshAfterMs,
+		SweepInterval:    DefaultSweepInterval,
+		MaxLeases:        0, // store default
 		MaxPendingIntroductions: 0, // store default
 	}
 }
@@ -80,6 +86,9 @@ func ConfigFromEnv() Config {
 	}
 	if v := os.Getenv("NEX_RENDEZVOUS_ADDR"); v != "" {
 		c.Addr = v
+	}
+	if v := os.Getenv("NEX_RENDEZVOUS_STUN_ADDR"); v != "" {
+		c.STUNAddr = v
 	}
 	c.TLSCertFile = os.Getenv("NEX_RENDEZVOUS_TLS_CERT")
 	c.TLSKeyFile = os.Getenv("NEX_RENDEZVOUS_TLS_KEY")
