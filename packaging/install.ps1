@@ -36,9 +36,9 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
 #
 # These three move together. Cutting a release means updating all three here.
 $repo = "MrEmoji27/nex"
-$version = "v3.0.0-alpha.1"
-$assetName = "Nex-setup-3.0.0-alpha.1.exe"
-$expectedSha256 = "e0cf3c26a34312e9763df3d0c0d65519888339bdab6958b2ae52942ec31149aa"
+$version = "v3.0.0-alpha.2"
+$assetName = "Nex-setup-3.0.0-alpha.2.exe"
+$expectedSha256 = "57d6ca51f7dfa152b5e420c70f86690aaad8ea1c3f27cc8372b8bc138a36d487"
 
 Write-Host "Resolving $version from GitHub..." -ForegroundColor Cyan
 

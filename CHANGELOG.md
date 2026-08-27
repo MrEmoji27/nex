@@ -9,11 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [3.0.0-alpha.1] - 2026-08-27
+## [3.0.0-alpha.2] - 2026-08-27
 
 ### Summary
 
 First public release. A Go rendezvous service for optional serverless discovery, cross-implementation conformance vectors that prove the Go and TypeScript rendezvous clients speak the same protocol, a native audio sidecar with real microphone capture and Opus encoding, and a license change to AGPL-3.0-or-later. This is an untested alpha.
+
+### Fixed in alpha.2
+
+- **The audio sidecar now ships with the installer.** `alpha.1` installed the app alone, so voice would have started and then silently done nothing — worse than voice being missing, because nothing tells you why. The build now refuses to produce an installer without it.
 
 ### Breaking Changes
 
