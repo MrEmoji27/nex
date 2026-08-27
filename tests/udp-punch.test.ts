@@ -67,7 +67,7 @@ describe("hole punching", () => {
     }
 
     expect(a.isSettled).toBe(true)
-    expect(openedAt).toEqual(B)
+    expect(openedAt as Endpoint | null).toEqual(B)
     // The first packet was dropped: B's router had no mapping for A yet. That
     // dropped packet is what opened A's own side.
     expect(dropped).toBeGreaterThan(0)
